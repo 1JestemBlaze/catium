@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path'), fs = require('fs'), os = require('os');
 const { Client, Authenticator } = require('minecraft-launcher-core');
@@ -18,6 +18,7 @@ const PRESETS = {
 };
 const JVM_FLAGS = ['-XX:+UnlockExperimentalVMOptions', '-XX:+UseG1GC', '-XX:MaxGCPauseMillis=50', '-XX:G1NewSizePercent=20', '-XX:G1ReservePercent=20', '-XX:G1HeapRegionSize=32M', '-XX:+DisableExplicitGC'];
 
+let gameStart = 0, gameInst = null;
 let win, session = null, rpc = null, gameRunning = false, pendingUpdate = false;
 const ud = () => app.getPath('userData');
 const dataDir = () => path.join(ud(), 'minecraft');
@@ -32,7 +33,7 @@ const enc = x => encodeURIComponent(JSON.stringify(x));
 const safeIn = (dir, p) => { const t = path.resolve(dir, p); return t.startsWith(path.resolve(dir) + path.sep) ? t : null; };
 async function download(url, file) { fs.mkdirSync(path.dirname(file), { recursive: true }); const r = await fetch(url, { headers: UA }); if (!r.ok) throw new Error('Pobieranie: ' + r.status); fs.writeFileSync(file, Buffer.from(await r.arrayBuffer())); }
 
-/* ---------- instancje ---------- */
+/* ---------- instalacje ---------- */
 function createInst(name, mc, loader) {
   const id = (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'inst') + '-' + Date.now().toString(36);
   const inst = { id, name, mc, loader }; fs.mkdirSync(instDir(id), { recursive: true });
@@ -42,7 +43,7 @@ const metaFile = id => path.join(instDir(id), 'catium.json');
 const readMeta = id => { try { return JSON.parse(fs.readFileSync(metaFile(id))); } catch { return {}; } };
 const writeMeta = (id, m) => fs.writeFileSync(metaFile(id), JSON.stringify(m));
 ipcMain.handle('settings:get', () => readCfg());
-ipcMain.handle('settings:set', (_, s) => writeCfg(s));
+ipcMain.handle('settings:set', (_, s) => { writeCfg(s); if (rpc) discordUpdate(); });
 ipcMain.handle('inst:create', (_, { name, mc, loader }) => createInst(name, mc, loader));
 ipcMain.handle('inst:delete', (_, id) => {
   const c = readCfg(); writeCfg({ instances: c.instances.filter(i => i.id !== id), active: c.active === id ? null : c.active });
@@ -63,12 +64,12 @@ ipcMain.handle('inst:toggle', (_, { id, kind, file }) => {
 ipcMain.handle('inst:remove', (_, { id, kind, file }) => fs.rmSync(path.join(instDir(id), KIND_DIR[kind], file), { force: true }));
 
 /* ---------- Modrinth ---------- */
-ipcMain.handle('mods:search', async (_, { query, type = 'mod', category, offset = 0, mc }) => {
+ipcMain.handle('mods:search', async (_, { query, type = 'mod', category, offset = 0, mc, limit = 20 }) => {
   const facets = [[`project_type:${type}`]];
   if (type === 'mod') facets.push(['categories:fabric', 'categories:quilt']);
   if (type !== 'modpack' && mc) facets.push([`versions:${mc}`]);
   if (category) facets.push([`categories:${category}`]);
-  const r = await getJson(`${MR}/search?query=${encodeURIComponent(query || '')}&limit=20&offset=${offset}&index=${query ? 'relevance' : 'downloads'}&facets=${enc(facets)}`, UA);
+  const r = await getJson(`${MR}/search?query=${encodeURIComponent(query || '')}&limit=${limit}&offset=${offset}&index=${query ? 'relevance' : 'downloads'}&facets=${enc(facets)}`, UA);
   return { total: r.total_hits, mods: r.hits.map(h => ({ id: h.project_id, title: h.title, desc: h.description, icon: h.icon_url })) };
 });
 async function installProject(project, inst, kind, meta, seen = new Set()) {
@@ -114,15 +115,13 @@ function writeOptions(id, opts) {
 }
 ipcMain.handle('opt:install', async (_, { instId, preset }) => {
   const inst = getInst(instId), p = PRESETS[preset] || PRESETS.balanced, done = [], failed = [];
-  if (!inst || inst.loader === 'vanilla') throw new Error('Wybierz instancję Fabric lub Quilt.');
+  if (!inst || inst.loader === 'vanilla') throw new Error('Wybierz instalację Fabric lub Quilt.');
   for (const m of p.mods) { send('status', `Instaluję ${m}...`); try { done.push(await installProject(m, inst, 'mod', { title: m })); } catch (e) { failed.push(e.message); } }
   writeOptions(instId, p.opts); return { done, failed };
 });
 ipcMain.handle('sys:ram', () => Math.round(os.totalmem() / 1e9));
 
 /* ---------- logowanie, skiny ---------- */
-ipcMain.handle('login', async () => { const m = await new Auth('select_account').launch('electron'); const a = await m.getMinecraft(); session = { type: 'ms', mc: a.mclc() }; return a.profile.name; });
-ipcMain.handle('login:offline', async (_, name) => { const n = String(name).replace(/[^A-Za-z0-9_]/g, '').slice(0, 16); if (n.length < 3) throw new Error('Nick: min. 3 znaki (litery, cyfry, _)'); session = { type: 'offline', mc: await Authenticator.getAuth(n) }; return n; });
 const bearer = () => { if (session?.type !== 'ms') throw new Error('Wymaga konta Microsoft'); return { Authorization: 'Bearer ' + session.mc.access_token }; };
 ipcMain.handle('skin:get', async () => {
   const r = await fetch(MC, { headers: bearer() }); if (!r.ok) throw new Error('Nie udało się pobrać profilu (' + r.status + ')');
@@ -148,29 +147,103 @@ async function prepareLoader(inst) {
 }
 ipcMain.handle('versions', async (_, snap) => (await getJson('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')).versions.filter(v => v.type === 'release' || (snap && v.type === 'snapshot')).map(v => v.id));
 ipcMain.handle('play', async (_, { instId, ram, jvm }) => {
-  const inst = getInst(instId); if (!inst) throw new Error('Najpierw utwórz instancję');
+  const inst = getInst(instId); if (!inst) throw new Error('Najpierw utwórz instalację');
   if (!session) throw new Error('Zaloguj się kontem Microsoft albo wybierz grę offline');
+  if (gameRunning) throw new Error('Gra już działa');
+  if (session.type === 'ms' && Date.now() - session.at > 3600000) await activate(session.id);
   fs.mkdirSync(dataDir(), { recursive: true });
   const version = { number: inst.mc, type: /^\d+\.\d+(\.\d+)?$/.test(inst.mc) ? 'release' : 'snapshot' };
   if (inst.loader !== 'vanilla') version.custom = await prepareLoader(inst);
   const l = new Client();
   l.on('progress', e => send('progress', e)); l.on('debug', d => send('status', d));
-  l.on('data', d => send('log', String(d)));
-  l.on('close', () => { gameRunning = false; send('status', 'Gra zamknięta'); restoreWindow(); discordOff(); if (pendingUpdate) autoUpdater.quitAndInstall(true, true); });
-  const proc = await l.launch({ authorization: session.mc, root: dataDir(), version, memory: { max: `${ram}G`, min: `${Math.min(2, ram)}G` }, customArgs: jvm ? JVM_FLAGS : [], overrides: { gameDirectory: instDir(inst.id) } });
+  l.on('data', d => { send('log', String(d)); if (rpc) watchLog(String(d)); });
+  l.on('close', () => { endGame(); gameRunning = false; send('status', 'Gra zamknięta'); restoreWindow(); discordOff(); if (pendingUpdate) autoUpdater.quitAndInstall(true, true); });
+  const proc = await l.launch({ authorization: session.mc, root: dataDir(), version, memory: { max: `${ram}G`, min: `${Math.min(2, ram)}G` }, customArgs: jvm ? JVM_FLAGS : [], javaPath: process.platform === 'win32' ? 'javaw' : 'java', detached: true, overrides: { gameDirectory: instDir(inst.id) } });
   if (!proc) { restoreWindow(); throw new Error('Nie udało się uruchomić gry. Sprawdź, czy masz Javę 21.'); }
   const mode = readCfg().onLaunch; if (mode === 'minimize') win.minimize(); else if (mode === 'hide') win.hide();
-  gameRunning = true; discordOn(inst.mc);
+  gameRunning = true; gameStart = Date.now(); gameInst = inst.id; send('game', { running: true, start: gameStart }); discordOn(inst.mc);
 });
+
+function endGame() {
+  if (!gameInst) return; const secs = Math.round((Date.now() - gameStart) / 1000), id = gameInst; gameInst = null;
+  writeCfg({ instances: readCfg().instances.map(i => i.id === id ? { ...i, playtime: (i.playtime || 0) + secs } : i) }); send('game', { running: false });
+}
+/* ---------- własne pliki i zestawy ustawień ---------- */
+ipcMain.handle('inst:add', async (_, { id, kind }) => {
+  const ext = { mod: ['jar'], resourcepack: ['zip'], shader: ['zip'] }[kind];
+  const r = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'], filters: [{ name: kind, extensions: ext }] });
+  if (r.canceled) return 0; const dir = path.join(instDir(id), KIND_DIR[kind]), m = readMeta(id); fs.mkdirSync(dir, { recursive: true });
+  r.filePaths.forEach(f => { const b = path.basename(f); fs.copyFileSync(f, path.join(dir, b)); m[kind + '/' + b] = { title: b }; }); writeMeta(id, m); return r.filePaths.length;
+});
+ipcMain.handle('inst:open', (_, { id, kind }) => { const d = path.join(instDir(id), KIND_DIR[kind]); fs.mkdirSync(d, { recursive: true }); return shell.openPath(d); });
+const presetDir = () => path.join(ud(), 'presets'), presetFile = n => path.join(presetDir(), path.basename(n) + '.txt');
+const parseOpts = f => { const m = new Map(); if (fs.existsSync(f)) fs.readFileSync(f, 'utf8').split(/\r?\n/).forEach(l => { const i = l.indexOf(':'); if (i > 0) m.set(l.slice(0, i), l.slice(i + 1)); }); return m; };
+ipcMain.handle('prof:list', () => fs.existsSync(presetDir()) ? fs.readdirSync(presetDir()).filter(f => f.endsWith('.txt')).map(f => f.slice(0, -4)) : []);
+ipcMain.handle('prof:save', (_, { instId, name }) => {
+  const src = path.join(instDir(instId), 'options.txt'); if (!fs.existsSync(src)) throw new Error('NOOPTS');
+  const n = name.replace(/[\\/:*?"<>|]/g, '').trim() || 'zestaw'; fs.mkdirSync(presetDir(), { recursive: true }); fs.copyFileSync(src, presetFile(n)); return n;
+});
+ipcMain.handle('prof:apply', (_, { instId, name, scope }) => {
+  const p = parseOpts(presetFile(name)), dst = path.join(instDir(instId), 'options.txt'), t = parseOpts(dst);
+  p.forEach((v, k) => { if (k === 'version' || (scope === 'keys' && !k.startsWith('key_'))) return; t.set(k, v); });
+  fs.mkdirSync(path.dirname(dst), { recursive: true }); fs.writeFileSync(dst, [...t].map(([k, v]) => `${k}:${v}`).join('\n') + '\n');
+});
+ipcMain.handle('prof:delete', (_, name) => fs.rmSync(presetFile(name), { force: true }));
+
+
+/* ---------- konta (zapamiętane, zaszyfrowane) ---------- */
+const accFile = () => path.join(ud(), 'accounts.json');
+const readAcc = () => { try { return { list: [], active: null, ...JSON.parse(fs.readFileSync(accFile())) }; } catch { return { list: [], active: null }; } };
+const writeAcc = a => fs.writeFileSync(accFile(), JSON.stringify(a));
+const encTok = t => safeStorage.isEncryptionAvailable() ? 'e:' + safeStorage.encryptString(t).toString('base64') : 'p:' + t;
+const decTok = x => x.startsWith('e:') ? safeStorage.decryptString(Buffer.from(x.slice(2), 'base64')) : x.slice(2);
+async function msLogin(refresh) {
+  const auth = new Auth('select_account'), mgr = refresh ? await auth.refresh(refresh) : await auth.launch('electron');
+  return { a: await mgr.getMinecraft(), token: mgr.save() };
+}
+async function activate(id) {
+  const d = readAcc(), acc = d.list.find(x => x.id === id); if (!acc) throw new Error('Brak takiego konta');
+  if (acc.type === 'offline') session = { type: 'offline', mc: await Authenticator.getAuth(acc.name), id };
+  else { const { a, token } = await msLogin(decTok(acc.token)); acc.token = encTok(token); session = { type: 'ms', mc: a.mclc(), id, at: Date.now() }; }
+  d.active = id; writeAcc(d); return { name: acc.name, type: acc.type };
+}
+ipcMain.handle('acc:list', () => { const d = readAcc(); return { list: d.list.map(({ id, type, name }) => ({ id, type, name })), active: d.active }; });
+ipcMain.handle('acc:addMs', async () => {
+  const { a, token } = await msLogin(), id = 'ms-' + a.profile.id, d = readAcc();
+  d.list = [...d.list.filter(x => x.id !== id), { id, type: 'ms', name: a.profile.name, token: encTok(token) }]; d.active = id; writeAcc(d);
+  session = { type: 'ms', mc: a.mclc(), id, at: Date.now() }; return { name: a.profile.name, type: 'ms' };
+});
+ipcMain.handle('acc:addOffline', async (_, name) => {
+  const n = String(name).replace(/[^A-Za-z0-9_]/g, '').slice(0, 16); if (n.length < 3) throw new Error('Nick: min. 3 znaki (litery, cyfry, _)');
+  const id = 'off-' + n, d = readAcc(); d.list = [...d.list.filter(x => x.id !== id), { id, type: 'offline', name: n }]; writeAcc(d); return activate(id);
+});
+ipcMain.handle('acc:use', (_, id) => activate(id));
+ipcMain.handle('acc:remove', (_, id) => { const d = readAcc(); d.list = d.list.filter(x => x.id !== id); if (d.active === id) d.active = null; if (session?.id === id) session = null; writeAcc(d); });
+ipcMain.handle('acc:restore', async () => { const d = readAcc(); if (!d.active) return null; try { return await activate(d.active); } catch { return null; } });
+ipcMain.handle('win:min', () => win.minimize());
+ipcMain.handle('win:max', () => win.isMaximized() ? win.unmaximize() : win.maximize());
+ipcMain.handle('win:close', () => win.close());
+ipcMain.handle('open:url', (_, u) => /^https:\/\//.test(u) ? shell.openExternal(u) : null);
+ipcMain.handle('news:get', async () => (await getJson('https://api.github.com/repos/1JestemBlaze/catium/releases?per_page=15', UA)).map(r => ({ tag: r.tag_name, date: r.published_at, body: (r.body || '').slice(0, 500) })));
 
 /* ---------- okno, discord, aktualizacje ---------- */
 function restoreWindow() { if (!win) return; win.show(); if (win.isMinimized()) win.restore(); win.focus(); }
+let rpcStart = null, rpcMc = '', rpcServer = null;
+const rpcActivity = () => ({ details: 'Gra w Catium', state: rpcServer && readCfg().discordServer !== false ? rpcServer : 'Minecraft ' + rpcMc, startTimestamp: rpcStart,
+  buttons: [{ label: 'Pobierz Catium', url: 'https://github.com/1JestemBlaze/catium/releases/latest' }] });
+const discordUpdate = () => { try { rpc?.user?.setActivity(rpcActivity()).catch(() => {}); } catch {} };
 async function discordOn(mc) {
   const cfg = readCfg(); if (!cfg.discord || !cfg.discordId) return;
-  try { const { Client: Rpc } = require('@xhayper/discord-rpc'); rpc = new Rpc({ clientId: cfg.discordId.trim() }); await rpc.login();
-    await rpc.user?.setActivity({ details: 'Gra w Catium', state: 'Minecraft ' + mc, startTimestamp: new Date() }); } catch (e) { send('status', 'Discord: ' + e.message); }
+  try { const { Client: Rpc } = require('@xhayper/discord-rpc'); rpcStart = new Date(); rpcMc = mc; rpcServer = null;
+    rpc = new Rpc({ clientId: cfg.discordId.trim() }); await rpc.login(); await rpc.user?.setActivity(rpcActivity()); } catch (e) { send('status', 'Discord: ' + e.message); }
 }
 function discordOff() { try { rpc?.destroy(); } catch {} rpc = null; }
+function watchLog(s) {
+  const en = readCfg().lang === 'en', m = /Connecting to ([^\s,]+), (\d+)/.exec(s);
+  if (m) rpcServer = (en ? 'Server: ' : 'Serwer: ') + (m[2] === '25565' ? m[1] : m[1] + ':' + m[2]);
+  else if (/Starting integrated minecraft server/.test(s)) rpcServer = en ? 'Singleplayer' : 'Tryb jednoosobowy'; else return;
+  discordUpdate();
+}
 function initUpdater() {
   if (!app.isPackaged) return;
   autoUpdater.on('update-available', i => send('update', { state: 'available', version: i.version }));
@@ -181,8 +254,10 @@ function initUpdater() {
 ipcMain.handle('update:install', () => autoUpdater.quitAndInstall());
 ipcMain.handle('app:version', () => app.getVersion());
 app.whenReady().then(() => {
-  win = new BrowserWindow({ width: 1180, height: 760, minWidth: 980, minHeight: 640, backgroundColor: '#0d1017', titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#0d1017', symbolColor: '#e9edf7', height: 36 }, webPreferences: { preload: path.join(__dirname, 'preload.js') } });
+  win = new BrowserWindow({ width: 1180, height: 760, minWidth: 980, minHeight: 640, backgroundColor: '#07060d', frame: false, webPreferences: { preload: path.join(__dirname, 'preload.js') } });
   win.setMenu(null); win.loadFile('renderer/index.html'); win.webContents.once('did-finish-load', initUpdater);
+  const fit = () => { const [w, h] = win.getContentSize(); win.webContents.setZoomFactor(Math.max(0.9, Math.min(1.7, Math.round(Math.min(w / 1180, h / 760) * 20) / 20))); };
+  ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen'].forEach(e => win.on(e, fit)); win.webContents.on('did-finish-load', fit);
+  win.webContents.on('before-input-event', (e, i) => { if (i.type === 'keyDown' && i.key === 'F11') { win.setFullScreen(!win.isFullScreen()); e.preventDefault(); } });
 });
 app.on('window-all-closed', () => app.quit());

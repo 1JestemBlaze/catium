@@ -2,31 +2,43 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https://cdn.modrinth.com https://textures.minecraft.net data: blob:; style-src 'self'">
 <title>Catium</title><link rel="stylesheet" href="style.css"></head><body>
 <aside>
-  <div class="brand"><img src="cat.svg" width="36" height="36" alt=""><b>Catium</b></div>
+  <div class="logo"><b>C<span class="a">Λ</span>TIUM</b><i></i></div>
   <nav>
     <button data-tab="home" class="on"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg><span data-i18n="nav_home"></span></button>
+    <button data-tab="inst"><svg viewBox="0 0 24 24"><path d="M5 4l14 8-14 8z"/></svg><span data-i18n="nav_inst"></span></button>
     <button data-tab="mods"><svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg><span data-i18n="nav_mods"></span></button>
     <button data-tab="opt"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span data-i18n="nav_opt"></span></button>
     <button data-tab="cos"><svg viewBox="0 0 24 24"><path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></svg><span data-i18n="nav_cos"></span></button>
-    <button data-tab="skins"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg><span data-i18n="nav_skins"></span></button>
+    <button data-tab="skins"><svg viewBox="0 0 24 24"><path d="M8 3l-5 3 2 4 3-1v12h8V9l3 1 2-4-5-3a4 4 0 0 1-8 0z"/></svg><span data-i18n="nav_skins"></span></button>
     <button data-tab="console"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM8 10l3 2-3 2M13 15h3"/></svg><span data-i18n="nav_console"></span></button>
+    <button data-tab="news"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6zM9 8h6M9 12h6M9 16h4"/></svg><span data-i18n="nav_news"></span></button>
+    <div class="grow"></div>
     <button data-tab="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg><span data-i18n="nav_settings"></span></button>
   </nav>
   <div id="upd" class="upd" hidden><span id="updt"></span><button id="updb" hidden></button></div>
-  <button id="login" class="account"></button><button id="offline" class="account sub"></button>
 </aside>
+<div class="right">
+<header class="top"><div class="grow"></div>
+  <button id="dcbtn" class="topbtn dcb" title="Discord"><svg viewBox="0 0 24 24"><path d="M20 5a17 17 0 0 0-4-1.3l-.5 1a15 15 0 0 0-4.500 0l-.5-1A17 17 0 0 0 6 5C3.500 9 2.800 13 3.100 17c1.600 1.200 3.200 1.900 4.800 2.400l1-1.700c-.6-.2-1.100-.5-1.700-.9l.4-.3a12 12 0 0 0 10.200 0l.4.3c-.5.4-1.100.7-1.700.9l1 1.700c1.600-.5 3.200-1.200 4.800-2.400.4-4.600-.7-8.600-2.600-12zM9.500 14.500c-.9 0-1.600-.8-1.600-1.800s.7-1.800 1.600-1.800 1.600.8 1.600 1.800-.7 1.800-1.600 1.800zm5 0c-.9 0-1.600-.8-1.600-1.800s.7-1.800 1.600-1.800 1.600.8 1.600 1.800-.7 1.800-1.600 1.800z"/></svg></button>
+  <div class="accwrap"><button id="acc" class="topbtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg><span id="accn"></span><svg viewBox="0 0 24 24" class="chev"><path d="M6 9l6 6 6-6"/></svg></button><div id="accmenu" class="accmenu" hidden></div></div>
+  <button id="wmin" class="topbtn sq">–</button><button id="wmax" class="topbtn sq">▢</button><button id="wclose" class="topbtn sq">✕</button>
+</header>
 <main>
-  <section id="home" class="tab on"><div class="home"><div class="col">
-    <h1 data-i18n="h_ready"></h1>
-    <span class="cap" data-i18n="insts"></span><div id="insts" class="insts"></div>
-    <label class="ram"><span><span data-i18n="ram"></span>: <b id="ramv">4 GB</b></span><input type="range" id="ram" min="1" max="16" step="1" value="4"></label>
-    <button id="play" class="play"></button>
+  <section id="home" class="tab on">
+    <img class="herocat" src="cat.svg" alt="">
+    <h1 class="word">C<span class="a">Λ</span>TIUM</h1><i class="under"></i>
+    <p class="tag" data-i18n="tagline"></p>
+    <div id="now" class="now" hidden><i></i><span id="nowt"></span></div>
+    <div id="quick" class="chips center"></div>
+    <button id="play" class="playbig"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg><span id="playt"></span></button>
     <div class="bar"><i id="barfill"></i></div><p id="status" class="status"></p>
-  </div><div class="mascot"><img src="cat.svg" alt=""></div></div></section>
+  </section>
+  <section id="inst" class="tab"><h1 data-i18n="insts"></h1><div id="insts" class="insts"></div>
+    <label class="ram"><span><span data-i18n="ram"></span>: <b id="ramv">4 GB</b></span><input type="range" id="ram" min="1" max="16" step="1" value="4"></label></section>
   <section id="mods" class="tab"><h1 data-i18n="mods_title"></h1>
     <div id="types" class="chips cats"></div>
     <input class="search" id="q" data-ph="search_ph"><div id="modcats" class="chips cats"></div>
-    <details class="card"><summary data-i18n="installedList"></summary><div id="instmods" class="list"></div></details>
+    <details class="card"><summary data-i18n="installedList"></summary><div class="chips own"><button id="addown" class="chip" data-i18n="add_own"></button><button id="openf" class="chip" data-i18n="open_folder"></button></div><div id="instmods" class="list"></div></details>
     <div id="modlist" class="list"></div></section>
   <section id="opt" class="tab"><h1 data-i18n="opt_title"></h1><p class="lead" data-i18n="opt_lead"></p>
     <p class="hint"><span data-i18n="opt_for"></span>: <b id="optinst"></b></p>
@@ -35,6 +47,7 @@
     <div class="chips"><button id="pack" class="play"></button><button id="autoram" class="chip"></button></div><p id="packout" class="status ok"></p></section>
   <section id="cos" class="tab"><h1 data-i18n="cos_title"></h1>
     <details class="card" open><summary data-i18n="cos_installed"></summary><div id="instcos" class="list"></div></details>
+    <h2 data-i18n="featured"></h2><div id="featured" class="list feat"></div><h2 data-i18n="cos_all"></h2>
     <input class="search" id="qc" data-ph="cos_search"><div id="coslist" class="list"></div></section>
   <section id="skins" class="tab"><h1 data-i18n="skins_title"></h1><div class="skinwrap">
     <div class="skincard"><span class="cap" data-i18n="cur_skin"></span><canvas id="cur" width="16" height="32"></canvas></div>
@@ -45,13 +58,19 @@
     <div class="card"><h2 data-i18n="capes"></h2><div id="capes" class="chips"></div><p class="hint" data-i18n="cape_note"></p></div></section>
   <section id="console" class="tab wide"><h1 data-i18n="console_title"></h1>
     <div class="chips"><button id="logclear" class="chip" data-i18n="clear"></button><button id="logcopy" class="chip" data-i18n="copy"></button></div><pre id="log"></pre></section>
+  <section id="news" class="tab"><h1 data-i18n="nav_news"></h1><p class="hint" id="appver2"></p><div id="newslist" class="list"></div></section>
   <section id="settings" class="tab"><h1 data-i18n="set_title"></h1>
     <div class="card"><h2 data-i18n="onlaunch"></h2><div id="onlaunch" class="chips"></div><p class="hint" data-i18n="ol_hint"></p></div>
     <div class="card"><h2 data-i18n="discord"></h2><label class="chk"><input type="checkbox" id="dc"><span data-i18n="dc_label"></span></label>
-      <input class="search" id="dcid" data-ph="dc_ph"><p class="hint" data-i18n="dc_hint"></p></div>
-    <div class="card"><h2 data-i18n="color"></h2><div id="swatches" class="chips"></div><label class="chk"><span data-i18n="custom"></span><input type="color" id="accent" value="#ff8a3d"></label></div>
+      <label class="chk"><input type="checkbox" id="dcs" checked><span data-i18n="dc_server"></span></label>
+      <input class="search" id="dcid" data-ph="dc_ph"><p class="hint" data-i18n="dc_hint"></p>
+      <input class="search" id="dcinv" data-ph="dc_inv_ph"></div>
+    <div class="card"><h2 data-i18n="color"></h2><div id="swatches" class="chips"></div><label class="chk"><span data-i18n="custom"></span><input type="color" id="accent" value="#8b3dff"></label></div>
     <div class="card"><h2 data-i18n="language"></h2><div id="langs" class="chips"></div></div>
+    <div class="card"><h2 data-i18n="pr_title"></h2><p class="hint" data-i18n="pr_lead"></p>
+      <input class="search" id="prname" data-ph="pr_name"><button id="prsave" class="chip" data-i18n="pr_save"></button>
+      <div id="prlist" class="list"></div><p id="prmsg" class="status"></p></div>
     <p class="hint" id="appver"></p></section>
-</main>
+</main></div>
 <dialog id="dlg"><h2 id="dlgt"></h2><div id="dlgb"></div><button id="dlgx" class="chip" data-i18n="close"></button></dialog>
 <script src="i18n.js"></script><script src="app.js"></script></body></html>
