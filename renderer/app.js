@@ -234,6 +234,8 @@ function askNick() {
 }
 $('#acc').onclick = async e => { e.stopPropagation(); const m = $('#accmenu'); if (m.hidden) await renderAccMenu(); m.hidden = !m.hidden; };
 document.addEventListener('click', e => { if (!e.target.closest('.accwrap')) $('#accmenu').hidden = true; });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#accmenu').hidden = true; });
+window.addEventListener('blur', () => { $('#accmenu').hidden = true; });
 $('#wmin').onclick = () => c.winMin(); $('#wmax').onclick = () => c.winMax(); $('#wclose').onclick = () => c.winClose();
 $('#dcbtn').onclick = () => { if (cfg.discordInvite) c.openUrl(cfg.discordInvite); else { tabBtn('settings').click(); $('#dcinv').focus(); } };
 $('#dcinv').oninput = e => save({ discordInvite: e.target.value.trim() });
