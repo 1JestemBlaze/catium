@@ -189,6 +189,8 @@ function setAccent(h) {
 }
 PRESETS_C.forEach(h => { const b = el('button', { className: 'sw', title: h, onclick: () => { setAccent(h); save({ accent: h }); } }); b.dataset.c = h; b.style.background = h; $('#swatches').append(b); });
 $('#accent').oninput = e => { setAccent(e.target.value); save({ accent: e.target.value }); };
+$('#autojava').onchange = e => save({ autoJava: e.target.checked });
+$('#javanow').onclick = async () => { const i = curInst(); if (!i) return $('#javamsg').textContent = t('noInst'); $('#javamsg').textContent = '...'; try { await c.javaUpdate(i.mc); $('#javamsg').textContent = t('java_ok'); } catch (e) { $('#javamsg').textContent = e.message; } };
 $('#dc').onchange = e => save({ discord: e.target.checked }); $('#dcs').onchange = e => save({ discordServer: e.target.checked }); $('#dcid').oninput = e => save({ discordId: e.target.value });
 function renderSettings() {
   const O = $('#onlaunch'); O.innerHTML = '';
@@ -249,7 +251,7 @@ $('#play').onclick = async () => {
   try { await c.play({ instId: active, ram: +$('#ram').value, jvm: $('#jvm').checked }); } catch (e) { say(e.message); } $('#play').disabled = false;
 };
 c.on('progress', e => { if (e.total) $('#barfill').style.width = (e.task / e.total * 100) + '%'; });
-c.on('status', x => { const o = $('#opt').classList.contains('on') ? $('#packout') : $('#status'); o.textContent = String(x).slice(0, 140); });
+c.on('status', x => { const o = $('#opt').classList.contains('on') ? $('#packout') : $('#settings').classList.contains('on') ? $('#javamsg') : $('#status'); o.textContent = String(x).slice(0, 140); });
 c.on('update', u => { $('#upd').hidden = false;
   $('#updt').textContent = u.state === 'available' ? t('upd_avail').replace('{v}', u.version) : u.state === 'downloading' ? t('upd_dl').replace('{p}', u.percent) : t('upd_ready').replace('{v}', u.version);
   $('#updb').hidden = u.state !== 'ready'; });
@@ -257,7 +259,7 @@ $('#updb').onclick = () => c.installUpdate();
 
 (async () => {
   cfg = await c.getSettings(); setAccent(cfg.accent || '#8b3dff');
-  $('#ram').value = cfg.ram || 4; $('#ramv').textContent = (cfg.ram || 4) + ' GB'; $('#dc').checked = !!cfg.discord; $('#dcs').checked = cfg.discordServer !== false; $('#dcid').value = cfg.discordId || '';
+  $('#ram').value = cfg.ram || 4; $('#ramv').textContent = (cfg.ram || 4) + ' GB'; $('#dc').checked = !!cfg.discord; $('#autojava').checked = cfg.autoJava !== false; $('#dcs').checked = cfg.discordServer !== false; $('#dcid').value = cfg.discordId || '';
   c.appVersion().then(v => { $('#appver').textContent = 'Catium ' + v; $('#appver2').textContent = 'Catium ' + v; }); $('#dcinv').value = cfg.discordInvite || '';
   runMods = browser({ input: $('#q'), list: $('#modlist'), tab: 'mods', getType: () => mtype, getCat: () => mtype === 'mod' ? cat : '' });
   browser({ input: $('#qc'), list: $('#coslist'), tab: 'cos', getType: () => 'mod', getCat: () => 'cosmetic', cosmetic: true });

@@ -1,9 +1,9 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, session: eSession } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path'), fs = require('fs'), os = require('os');
 const { Client, Authenticator } = require('minecraft-launcher-core');
 const { Auth } = require('msmc');
-const AdmZip = require('adm-zip');
+const AdmZip = require('adm-zip'), crypto = require('crypto');
 
 const UA = { 'User-Agent': 'Catium/0.3.0 (launcher)' };
 const MR = 'https://api.modrinth.com/v2', MC = 'https://api.minecraftservices.com/minecraft/profile';
@@ -137,6 +137,26 @@ ipcMain.handle('cape:set', async (_, id) => {
   if (!r.ok) throw new Error('Nie udało się zmienić peleryny (' + r.status + ')');
 });
 
+
+/* ---------- Java (pobieranie i aktualizacja) ---------- */
+const JAVA_ALL = 'https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json';
+const javaPlat = () => process.platform === 'win32' ? (process.arch === 'arm64' ? 'windows-arm64' : 'windows-x64') : process.platform === 'darwin' ? (process.arch === 'arm64' ? 'mac-os-arm64' : 'mac-os') : 'linux';
+async function ensureJava(mc) {
+  const man = await getJson('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'), v = man.versions.find(x => x.id === mc); if (!v) return null;
+  const comp = (await getJson(v.url)).javaVersion?.component || 'jre-legacy', entry = (await getJson(JAVA_ALL))[javaPlat()]?.[comp]?.[0]; if (!entry) return null;
+  const dir = path.join(ud(), 'java', comp), exe = path.join(dir, 'bin', process.platform === 'win32' ? 'javaw.exe' : 'java'), stamp = path.join(dir, '.catium');
+  if (fs.existsSync(exe) && fs.existsSync(stamp) && fs.readFileSync(stamp, 'utf8') === entry.manifest.sha1) return exe;
+  const files = Object.entries((await getJson(entry.manifest.url)).files); let n = 0;
+  for (const [rel, f] of files) {
+    const t = safeIn(dir, rel); if (!t) continue; n++;
+    if (f.type === 'directory') { fs.mkdirSync(t, { recursive: true }); continue; } if (f.type !== 'file') continue;
+    if (fs.existsSync(t) && crypto.createHash('sha1').update(fs.readFileSync(t)).digest('hex') === f.downloads.raw.sha1) continue;
+    send('status', `Java: ${n}/${files.length}`); await download(f.downloads.raw.url, t); if (f.executable) try { fs.chmodSync(t, 0o755); } catch {}
+  }
+  fs.writeFileSync(stamp, entry.manifest.sha1); return fs.existsSync(exe) ? exe : null;
+}
+ipcMain.handle('java:update', async (_, mc) => { if (!(await ensureJava(mc))) throw new Error('Nie znaleziono Javy dla tej wersji'); });
+
 /* ---------- gra ---------- */
 async function prepareLoader(inst) {
   const base = inst.loader === 'quilt' ? 'https://meta.quiltmc.org/v3/versions/loader' : 'https://meta.fabricmc.net/v2/versions/loader';
@@ -154,11 +174,13 @@ ipcMain.handle('play', async (_, { instId, ram, jvm }) => {
   fs.mkdirSync(dataDir(), { recursive: true });
   const version = { number: inst.mc, type: /^\d+\.\d+(\.\d+)?$/.test(inst.mc) ? 'release' : 'snapshot' };
   if (inst.loader !== 'vanilla') version.custom = await prepareLoader(inst);
+  let javaPath = process.platform === 'win32' ? 'javaw' : 'java';
+  if (readCfg().autoJava !== false) { try { javaPath = (await ensureJava(inst.mc)) || javaPath; } catch (e) { send('status', 'Java: ' + e.message + ' (używam systemowej)'); } }
   const l = new Client();
   l.on('progress', e => send('progress', e)); l.on('debug', d => send('status', d));
   l.on('data', d => { send('log', String(d)); if (rpc) watchLog(String(d)); });
   l.on('close', () => { endGame(); gameRunning = false; send('status', 'Gra zamknięta'); restoreWindow(); discordOff(); if (pendingUpdate) autoUpdater.quitAndInstall(true, true); });
-  const proc = await l.launch({ authorization: session.mc, root: dataDir(), version, memory: { max: `${ram}G`, min: `${Math.min(2, ram)}G` }, customArgs: jvm ? JVM_FLAGS : [], javaPath: process.platform === 'win32' ? 'javaw' : 'java', detached: true, overrides: { gameDirectory: instDir(inst.id) } });
+  const proc = await l.launch({ authorization: session.mc, root: dataDir(), version, memory: { max: `${ram}G`, min: `${Math.min(2, ram)}G` }, customArgs: jvm ? JVM_FLAGS : [], javaPath, detached: true, overrides: { gameDirectory: instDir(inst.id) } });
   if (!proc) { restoreWindow(); throw new Error('Nie udało się uruchomić gry. Sprawdź, czy masz Javę 21.'); }
   const mode = readCfg().onLaunch; if (mode === 'minimize') win.minimize(); else if (mode === 'hide') win.hide();
   gameRunning = true; gameStart = Date.now(); gameInst = inst.id; send('game', { running: true, start: gameStart }); discordOn(inst.mc);
@@ -198,6 +220,7 @@ const writeAcc = a => fs.writeFileSync(accFile(), JSON.stringify(a));
 const encTok = t => safeStorage.isEncryptionAvailable() ? 'e:' + safeStorage.encryptString(t).toString('base64') : 'p:' + t;
 const decTok = x => x.startsWith('e:') ? safeStorage.decryptString(Buffer.from(x.slice(2), 'base64')) : x.slice(2);
 async function msLogin(refresh) {
+  if (!refresh) await eSession.defaultSession.clearStorageData({ storages: ['cookies', 'localstorage', 'indexdb', 'cachestorage'] });
   const auth = new Auth('select_account'), mgr = refresh ? await auth.refresh(refresh) : await auth.launch('electron');
   return { a: await mgr.getMinecraft(), token: mgr.save() };
 }
@@ -254,7 +277,7 @@ function initUpdater() {
 ipcMain.handle('update:install', () => autoUpdater.quitAndInstall());
 ipcMain.handle('app:version', () => app.getVersion());
 app.whenReady().then(() => {
-  win = new BrowserWindow({ width: 1180, height: 760, minWidth: 980, minHeight: 640, backgroundColor: '#07060d', frame: false, webPreferences: { preload: path.join(__dirname, 'preload.js') } });
+  win = new BrowserWindow({ width: 1180, height: 760, minWidth: 980, minHeight: 640, backgroundColor: '#07060d', frame: false, icon: path.join(__dirname, 'renderer', 'icon.png'), webPreferences: { preload: path.join(__dirname, 'preload.js') } });
   win.setMenu(null); win.loadFile('renderer/index.html'); win.webContents.once('did-finish-load', initUpdater);
   const fit = () => { const [w, h] = win.getContentSize(); win.webContents.setZoomFactor(Math.max(0.9, Math.min(1.7, Math.round(Math.min(w / 1180, h / 760) * 20) / 20))); };
   ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen'].forEach(e => win.on(e, fit)); win.webContents.on('did-finish-load', fit);
