@@ -138,6 +138,20 @@ ipcMain.handle('cape:set', async (_, id) => {
 });
 
 
+
+/* ---------- naprawa ---------- */
+ipcMain.handle('repair', (_, { instId, mode }) => {
+  const inst = getInst(instId); if (!inst) throw new Error('Wybierz instalację'); if (gameRunning) throw new Error('Zamknij grę przed naprawą');
+  const rm = p => fs.rmSync(p, { recursive: true, force: true }), root = dataDir(), vdir = path.join(root, 'versions');
+  if (mode === 'quick' || mode === 'full') {
+    rm(path.join(vdir, inst.mc)); rm(path.join(root, 'natives'));
+    if (fs.existsSync(vdir)) fs.readdirSync(vdir).filter(d => /^(fabric|quilt)-loader-/.test(d) && d.endsWith('-' + inst.mc)).forEach(d => rm(path.join(vdir, d)));
+  }
+  if (mode === 'full') { rm(path.join(root, 'libraries')); rm(path.join(root, 'assets', 'indexes')); rm(path.join(ud(), 'java')); }
+  if (mode === 'options') { const f = path.join(instDir(instId), 'options.txt'); if (fs.existsSync(f)) fs.renameSync(f, f + '.bak'); }
+  if (mode === 'mods') { const d = path.join(instDir(instId), 'mods'); if (fs.existsSync(d)) fs.readdirSync(d).filter(f => f.endsWith('.jar')).forEach(f => fs.renameSync(path.join(d, f), path.join(d, f + '.disabled'))); }
+});
+
 /* ---------- Java (pobieranie i aktualizacja) ---------- */
 const JAVA_ALL = 'https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json';
 const javaPlat = () => process.platform === 'win32' ? (process.arch === 'arm64' ? 'windows-arm64' : 'windows-x64') : process.platform === 'darwin' ? (process.arch === 'arm64' ? 'mac-os-arm64' : 'mac-os') : 'linux';
@@ -252,7 +266,7 @@ ipcMain.handle('news:get', async () => (await getJson('https://api.github.com/re
 /* ---------- okno, discord, aktualizacje ---------- */
 function restoreWindow() { if (!win) return; win.show(); if (win.isMinimized()) win.restore(); win.focus(); }
 let rpcStart = null, rpcMc = '', rpcServer = null;
-const rpcActivity = () => ({ details: 'Gra w Catium', state: rpcServer && readCfg().discordServer !== false ? rpcServer : 'Minecraft ' + rpcMc, startTimestamp: rpcStart,
+const rpcActivity = () => ({ details: 'Gra w Catium', state: rpcServer && readCfg().discordServer !== false ? rpcServer : 'Minecraft ' + rpcMc, startTimestamp: rpcStart, largeImageKey: readCfg().discordImage || 'https://raw.githubusercontent.com/1JestemBlaze/catium/main/build/icon.png', largeImageText: 'Catium',
   buttons: [{ label: 'Pobierz Catium', url: 'https://github.com/1JestemBlaze/catium/releases/latest' }] });
 const discordUpdate = () => { try { rpc?.user?.setActivity(rpcActivity()).catch(() => {}); } catch {} };
 async function discordOn(mc) {

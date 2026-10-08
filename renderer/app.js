@@ -206,13 +206,25 @@ async function renderProfiles() {
       el('button', { textContent: t('remove'), onclick: async () => { await c.profDelete(n); renderProfiles(); } })); L.append(r); });
 }
 $('#prsave').onclick = async () => { if (!active) return prMsg(t('noInst')); try { await c.profSave({ instId: active, name: $('#prname').value || 'Zestaw' }); prMsg(t('pr_ok')); renderProfiles(); } catch (e) { prMsg(e.message.includes('NOOPTS') ? t('pr_noopts') : e.message); } };
-tabBtn('settings').addEventListener('click', renderProfiles);
+let repId = null;
+function renderRepair() {
+  const S = $('#repsel'); S.innerHTML = ''; if (!insts.length) { S.textContent = t('repair_none'); return; }
+  if (!insts.some(i => i.id === repId)) repId = active || insts[0].id;
+  insts.forEach(i => S.append(chip(`${i.name} (${i.mc})`, i.id === repId, () => { repId = i.id; renderRepair(); })));
+}
+const doRepair = async mode => {
+  if (!repId) return $('#repmsg').textContent = t('repair_none'); if (mode === 'full' && !confirm(t('repair_confirm'))) return;
+  $('#repmsg').textContent = '...'; try { await c.repair({ instId: repId, mode }); $('#repmsg').textContent = t('repair_done'); } catch (e) { $('#repmsg').textContent = e.message; }
+};
+['quick', 'full', 'options', 'mods'].forEach(m => $('#rep-' + m).onclick = () => doRepair(m));
+$('#dcimg').oninput = e => save({ discordImage: e.target.value.trim() });
+tabBtn('settings').addEventListener('click', () => { renderProfiles(); renderRepair(); });
 function applyLang() {
   document.documentElement.lang = cfg.lang || 'pl';
   $$('[data-i18n]').forEach(e => e.textContent = t(e.dataset.i18n)); $$('[data-ph]').forEach(e => e.placeholder = t(e.dataset.ph));
   $('#playt').textContent = t('play'); $('#pack').textContent = t('opt_install'); $('#autoram').textContent = t('auto_ram'); $('#updb').textContent = t('upd_btn');
   if (!session) $('#accn').textContent = t('acc_none');
-  renderSettings(); renderProfiles(); renderInsts(); renderOpt(); renderTypes(); renderInstalled();
+  renderSettings(); renderProfiles(); renderRepair(); renderInsts(); renderOpt(); renderTypes(); renderInstalled();
 }
 
 /* ---- logowanie, gra, aktualizacje ---- */
@@ -262,7 +274,7 @@ $('#updb').onclick = () => c.installUpdate();
 (async () => {
   cfg = await c.getSettings(); setAccent(cfg.accent || '#8b3dff');
   $('#ram').value = cfg.ram || 4; $('#ramv').textContent = (cfg.ram || 4) + ' GB'; $('#dc').checked = !!cfg.discord; $('#autojava').checked = cfg.autoJava !== false; $('#dcs').checked = cfg.discordServer !== false; $('#dcid').value = cfg.discordId || '';
-  c.appVersion().then(v => { $('#appver').textContent = 'Catium ' + v; $('#appver2').textContent = 'Catium ' + v; }); $('#dcinv').value = cfg.discordInvite || '';
+  c.appVersion().then(v => { $('#appver').textContent = 'Catium ' + v; $('#appver2').textContent = 'Catium ' + v; }); $('#dcinv').value = cfg.discordInvite || ''; $('#dcimg').value = cfg.discordImage || '';
   runMods = browser({ input: $('#q'), list: $('#modlist'), tab: 'mods', getType: () => mtype, getCat: () => mtype === 'mod' ? cat : '' });
   browser({ input: $('#qc'), list: $('#coslist'), tab: 'cos', getType: () => 'mod', getCat: () => 'cosmetic', cosmetic: true });
   applyLang(); await loadInsts(); c.accRestore().then(r => { if (r) setSession(r.type, r.name); });
