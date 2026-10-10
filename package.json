@@ -1,6 +1,6 @@
 {
   "name": "catium",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Catium - Minecraft launcher",
   "main": "main.js",
   "scripts": {

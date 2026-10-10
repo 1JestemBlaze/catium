@@ -35,7 +35,7 @@ async function versionPicker() {
 /* ---- instalacje ---- */
 async function loadInsts() {
   cfg = await c.getSettings(); insts = cfg.instances || [];
-  active = insts.some(i => i.id === cfg.active) ? cfg.active : insts[0]?.id || null; renderInsts(); renderOpt(); renderInstalled();
+  active = insts.some(i => i.id === cfg.active) ? cfg.active : insts[0]?.id || null; renderInsts(); renderOpt(); renderInstalled(); renderMig();
 }
 function renderInsts() {
   const g = $('#insts'); g.innerHTML = '';
@@ -87,26 +87,42 @@ const kindNow = () => ({ mod: 'mod', resourcepack: 'resourcepack', shader: 'shad
 $('#addown').onclick = async () => { if (active && await c.instAdd({ id: active, kind: kindNow() })) renderInstalled(); };
 $('#openf').onclick = () => active && c.instOpen({ id: active, kind: kindNow() });
 
-let migFrom = null, migTo = null, migBusy = false;
-function renderMig() {
-  const F = $('#migfrom'), T = $('#migto'); F.innerHTML = ''; T.innerHTML = '';
-  if (!insts.some(i => i.id === migFrom)) migFrom = active || insts[0]?.id; if (!insts.some(i => i.id === migTo) || migTo === migFrom) migTo = insts.find(i => i.id !== migFrom)?.id || null;
-  insts.forEach(i => { const l = `${i.name} (${i.mc} ${LOADERS[i.loader]})`;
-    F.append(chip(l, i.id === migFrom, () => { migFrom = i.id; renderMig(); })); T.append(chip(l, i.id === migTo, () => { migTo = i.id; renderMig(); })); });
+let migFrom = null, migTo = null, migStep = 1, migBusy = false;
+const instLabel = i => `${i.name} (${i.mc} ${LOADERS[i.loader]})`;
+function migCards(onPick, exclude, selected) {
+  const g = el('div', { className: 'insts' });
+  insts.filter(i => i.id !== exclude).forEach(i => { const d = el('button', { className: 'inst' + (i.id === selected ? ' on' : ''), onclick: () => onPick(i.id) });
+    d.append(el('b', { textContent: i.name }), el('small', { textContent: `${i.mc} · ${LOADERS[i.loader]}` })); g.append(d); });
+  return g;
 }
-$('#migrun').onclick = async () => {
-  const msg = $('#migmsg'), box = $('#migres'); box.innerHTML = ''; if (!migFrom || !migTo || migFrom === migTo) return msg.textContent = t('mig_pick');
-  msg.textContent = t('installing'); migBusy = true;
+function renderMig() {
+  const B = $('#migbox'); B.innerHTML = '';
+  if (insts.length < 2) { B.append(el('p', { className: 'hint', textContent: t('mig_need2') })); return; }
+  if (!insts.some(i => i.id === migFrom)) { migFrom = null; migStep = 1; } if (!insts.some(i => i.id === migTo) || migTo === migFrom) migTo = null;
+  B.append(el('span', { className: 'cap', textContent: t('mig_step').replace('{n}', migStep) }));
+  if (migStep === 1) {
+    B.append(el('h2', { textContent: t('mig_q1') }), migCards(id => { migFrom = id; migTo = null; migStep = 2; $('#migmsg').textContent = ''; $('#migres').innerHTML = ''; renderMig(); }, null, migFrom));
+    return;
+  }
+  const src = insts.find(i => i.id === migFrom);
+  B.append(el('h2', { textContent: t('mig_q2') }), el('p', { className: 'hint', textContent: t('mig_from') + ': ' + instLabel(src) }), migCards(id => { migTo = id; renderMig(); }, migFrom, migTo));
+  const row = el('div', { className: 'chips own' });
+  row.append(el('button', { className: 'chip', textContent: t('mig_back'), onclick: () => { migStep = 1; renderMig(); } }),
+    el('button', { className: 'play', id: 'migrun', textContent: migTo ? t('mig_run') : t('mig_pickto'), disabled: !migTo || migBusy, onclick: runMig })); B.append(row);
+  if (migTo) B.append(el('p', { className: 'hint', textContent: instLabel(src) + ' → ' + instLabel(insts.find(i => i.id === migTo)) }));
+}
+async function runMig() {
+  const msg = $('#migmsg'), box = $('#migres'); box.innerHTML = ''; msg.textContent = t('installing'); migBusy = true; renderMig();
   try { const r = await c.migrate({ from: migFrom, to: migTo }); msg.textContent = t('mig_done').replace('{n}', r.done);
     [['mig_missing', r.missing], ['mig_unknown', r.unknown]].forEach(([k, l]) => { if (l.length) { const d = el('div', { className: 'row' }); d.append(el('b', { textContent: t(k) + ': ' + l.join(', '), title: l.join(', ') })); box.append(d); } });
     if (migTo === active) renderInstalled(); }
-  catch (e) { msg.textContent = e.message; } migBusy = false;
-};
-
+  catch (e) { msg.textContent = e.message; }
+  migBusy = false; renderMig();
+}
 $$('.subtabs').forEach(bar => { const sec = bar.parentElement; bar.querySelectorAll('button').forEach(b => b.onclick = () => {
   bar.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
   sec.querySelectorAll(':scope > .subpanel').forEach(p => p.classList.toggle('on', p.dataset.sub === b.dataset.sub));
-  if (b.dataset.sub === 'installed' || b.dataset.sub === 'mine') renderInstalled(); }); });
+  if (b.dataset.sub === 'installed' || b.dataset.sub === 'mine') renderInstalled(); if (b.dataset.sub === 'move') renderMig(); }); });
 
 /* ---- Modrinth ---- */
 function modCard(m, kind, cosmetic) {
