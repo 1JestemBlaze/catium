@@ -64,3 +64,7 @@ summary{cursor:pointer;color:var(--mute)}details .list{margin-top:12px}details.c
 .now i{width:9px;height:9px;border-radius:50%;background:var(--ok);animation:pulse 1.4s infinite}@keyframes pulse{50%{opacity:.25}}
 .rel{display:flex;flex-direction:column;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}.rel b{color:var(--accent)}.rel small{color:var(--mute)}.rel p{margin:6px 0 0;white-space:pre-wrap;color:var(--text)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.subtabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:20px;flex-wrap:wrap}
+.subtabs button{background:none;color:var(--mute);padding:10px 20px;border-radius:10px 10px 0 0;border-bottom:2px solid transparent;transition:color .15s,background .15s}
+.subtabs button:hover{color:var(--text)}.subtabs button.on{color:var(--text);border-bottom-color:var(--accent);background:linear-gradient(180deg,transparent,var(--tint))}
+.subpanel{display:none}.subpanel.on{display:block;animation:in .2s ease}

@@ -36,18 +36,25 @@
     <label class="ram"><span><span data-i18n="ram"></span>: <b id="ramv">4 GB</b></span><input type="range" id="ram" min="1" max="16" step="1" value="4"></label></section>
   <section id="mods" class="tab"><h1 data-i18n="mods_title"></h1>
     <div id="types" class="chips cats"></div>
-    <input class="search" id="q" data-ph="search_ph"><div id="modcats" class="chips cats"></div>
-    <details class="card"><summary data-i18n="installedList"></summary><div class="chips own"><button id="addown" class="chip" data-i18n="add_own"></button><button id="openf" class="chip" data-i18n="open_folder"></button></div><div id="instmods" class="list"></div></details>
-    <div id="modlist" class="list"></div></section>
+    <div class="subtabs"><button class="on" data-sub="browse" data-i18n="sub_browse"></button><button data-sub="installed" data-i18n="sub_installed"></button><button data-sub="move" data-i18n="sub_move"></button></div>
+    <div class="subpanel on" data-sub="browse"><input class="search" id="q" data-ph="search_ph"><div id="modcats" class="chips cats"></div><div id="modlist" class="list"></div></div>
+    <div class="subpanel" data-sub="installed"><p class="hint" data-i18n="installedList"></p><div class="chips own"><button id="addown" class="chip" data-i18n="add_own"></button><button id="openf" class="chip" data-i18n="open_folder"></button></div><div id="instmods" class="list"></div></div>
+    <div class="subpanel" data-sub="move"><p class="hint" data-i18n="mig_lead"></p>
+      <span class="cap" data-i18n="mig_from"></span><div id="migfrom" class="chips"></div>
+      <span class="cap" data-i18n="mig_to"></span><div id="migto" class="chips"></div>
+      <button id="migrun" class="chip own" data-i18n="mig_run"></button><p id="migmsg" class="status"></p><div id="migres" class="list"></div></div>
+  </section>
   <section id="opt" class="tab"><h1 data-i18n="opt_title"></h1><p class="lead" data-i18n="opt_lead"></p>
     <p class="hint"><span data-i18n="opt_for"></span>: <b id="optinst"></b></p>
     <div id="presets" class="chips"></div><p id="presetd" class="hint"></p>
     <label class="chk"><input type="checkbox" id="jvm" checked><span data-i18n="jvm"></span></label>
     <div class="chips"><button id="pack" class="play"></button><button id="autoram" class="chip"></button></div><p id="packout" class="status ok"></p></section>
   <section id="cos" class="tab"><h1 data-i18n="cos_title"></h1>
-    <details class="card" open><summary data-i18n="cos_installed"></summary><div id="instcos" class="list"></div></details>
-    <h2 data-i18n="featured"></h2><div id="featured" class="list feat"></div><h2 data-i18n="cos_all"></h2>
-    <input class="search" id="qc" data-ph="cos_search"><div id="coslist" class="list"></div></section>
+    <div class="subtabs"><button class="on" data-sub="featured" data-i18n="sub_featured"></button><button data-sub="search" data-i18n="sub_search"></button><button data-sub="mine" data-i18n="sub_mine"></button></div>
+    <div class="subpanel on" data-sub="featured"><div id="featured" class="list feat"></div></div>
+    <div class="subpanel" data-sub="search"><input class="search" id="qc" data-ph="cos_search"><div id="coslist" class="list"></div></div>
+    <div class="subpanel" data-sub="mine"><p class="hint" data-i18n="cos_installed"></p><div id="instcos" class="list"></div></div>
+  </section>
   <section id="skins" class="tab"><h1 data-i18n="skins_title"></h1><div class="skinwrap">
     <div class="skincard"><span class="cap" data-i18n="cur_skin"></span><canvas id="cur" width="16" height="32"></canvas></div>
     <div class="skincard"><span class="cap" data-i18n="new_skin"></span><canvas id="nw" width="16" height="32"></canvas></div>

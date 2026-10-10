@@ -40,7 +40,7 @@ async function loadInsts() {
 function renderInsts() {
   const g = $('#insts'); g.innerHTML = '';
   insts.forEach(i => {
-    const d = el('div', { className: 'inst' + (i.id === active ? ' on' : ''), onclick: () => { active = i.id; save({ active }); renderInsts(); renderOpt(); renderInstalled(); } });
+    const d = el('div', { className: 'inst' + (i.id === active ? ' on' : ''), onclick: () => { active = i.id; save({ active }); renderInsts(); renderOpt(); renderInstalled(); renderMig(); } });
     d.append(el('b', { textContent: i.name }), el('small', { textContent: `${i.mc} · ${LOADERS[i.loader]}` }), el('small', { textContent: fmtPlay(i.playtime) }),
       el('button', { className: 'x', textContent: '×', onclick: async e => { e.stopPropagation(); if (confirm(t('confirmDel'))) { await c.instDelete(i.id); await loadInsts(); } } }));
     g.append(d);
@@ -86,6 +86,27 @@ async function renderInstalled() {
 const kindNow = () => ({ mod: 'mod', resourcepack: 'resourcepack', shader: 'shader', modpack: 'mod' }[mtype]);
 $('#addown').onclick = async () => { if (active && await c.instAdd({ id: active, kind: kindNow() })) renderInstalled(); };
 $('#openf').onclick = () => active && c.instOpen({ id: active, kind: kindNow() });
+
+let migFrom = null, migTo = null, migBusy = false;
+function renderMig() {
+  const F = $('#migfrom'), T = $('#migto'); F.innerHTML = ''; T.innerHTML = '';
+  if (!insts.some(i => i.id === migFrom)) migFrom = active || insts[0]?.id; if (!insts.some(i => i.id === migTo) || migTo === migFrom) migTo = insts.find(i => i.id !== migFrom)?.id || null;
+  insts.forEach(i => { const l = `${i.name} (${i.mc} ${LOADERS[i.loader]})`;
+    F.append(chip(l, i.id === migFrom, () => { migFrom = i.id; renderMig(); })); T.append(chip(l, i.id === migTo, () => { migTo = i.id; renderMig(); })); });
+}
+$('#migrun').onclick = async () => {
+  const msg = $('#migmsg'), box = $('#migres'); box.innerHTML = ''; if (!migFrom || !migTo || migFrom === migTo) return msg.textContent = t('mig_pick');
+  msg.textContent = t('installing'); migBusy = true;
+  try { const r = await c.migrate({ from: migFrom, to: migTo }); msg.textContent = t('mig_done').replace('{n}', r.done);
+    [['mig_missing', r.missing], ['mig_unknown', r.unknown]].forEach(([k, l]) => { if (l.length) { const d = el('div', { className: 'row' }); d.append(el('b', { textContent: t(k) + ': ' + l.join(', '), title: l.join(', ') })); box.append(d); } });
+    if (migTo === active) renderInstalled(); }
+  catch (e) { msg.textContent = e.message; } migBusy = false;
+};
+
+$$('.subtabs').forEach(bar => { const sec = bar.parentElement; bar.querySelectorAll('button').forEach(b => b.onclick = () => {
+  bar.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  sec.querySelectorAll(':scope > .subpanel').forEach(p => p.classList.toggle('on', p.dataset.sub === b.dataset.sub));
+  if (b.dataset.sub === 'installed' || b.dataset.sub === 'mine') renderInstalled(); }); });
 
 /* ---- Modrinth ---- */
 function modCard(m, kind, cosmetic) {
@@ -224,7 +245,7 @@ function applyLang() {
   $$('[data-i18n]').forEach(e => e.textContent = t(e.dataset.i18n)); $$('[data-ph]').forEach(e => e.placeholder = t(e.dataset.ph));
   $('#playt').textContent = t('play'); $('#pack').textContent = t('opt_install'); $('#autoram').textContent = t('auto_ram'); $('#updb').textContent = t('upd_btn');
   if (!session) $('#accn').textContent = t('acc_none');
-  renderSettings(); renderProfiles(); renderRepair(); renderInsts(); renderOpt(); renderTypes(); renderInstalled();
+  renderSettings(); renderProfiles(); renderRepair(); renderMig(); renderInsts(); renderOpt(); renderTypes(); renderInstalled();
 }
 
 /* ---- logowanie, gra, aktualizacje ---- */
@@ -265,7 +286,7 @@ $('#play').onclick = async () => {
   try { await c.play({ instId: active, ram: +$('#ram').value, jvm: $('#jvm').checked }); } catch (e) { say(e.message); } $('#play').disabled = false;
 };
 c.on('progress', e => { if (e.total) $('#barfill').style.width = (e.task / e.total * 100) + '%'; });
-c.on('status', x => { const o = $('#opt').classList.contains('on') ? $('#packout') : $('#settings').classList.contains('on') ? $('#javamsg') : $('#status'); o.textContent = String(x).slice(0, 140); });
+c.on('status', x => { const o = migBusy ? $('#migmsg') : $('#opt').classList.contains('on') ? $('#packout') : $('#settings').classList.contains('on') ? $('#javamsg') : $('#status'); o.textContent = String(x).slice(0, 140); });
 c.on('update', u => { $('#upd').hidden = false;
   $('#updt').textContent = u.state === 'available' ? t('upd_avail').replace('{v}', u.version) : u.state === 'downloading' ? t('upd_dl').replace('{p}', u.percent) : t('upd_ready').replace('{v}', u.version);
   $('#updb').hidden = u.state !== 'ready'; });

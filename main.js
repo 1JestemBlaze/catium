@@ -139,6 +139,29 @@ ipcMain.handle('cape:set', async (_, id) => {
 
 
 
+
+/* ---------- przenoszenie modyfikacji między instalacjami ---------- */
+ipcMain.handle('mods:migrate', async (_, { from, to }) => {
+  const A = getInst(from), B = getInst(to);
+  if (!A || !B || from === to) throw new Error('Wybierz dwie różne instalacje');
+  if (B.loader === 'vanilla') throw new Error('Docelowa instalacja to Vanilla i nie obsługuje modów. Utwórz Fabric lub Quilt.');
+  const res = { done: 0, missing: [], unknown: [] }, seen = new Set(), srcMeta = readMeta(from);
+  for (const kind of ['mod', 'resourcepack', 'shader']) {
+    const dir = path.join(instDir(from), KIND_DIR[kind]); if (!fs.existsSync(dir)) continue;
+    const files = fs.readdirSync(dir).filter(f => /\.(jar|zip)$/.test(f)); if (!files.length) continue;
+    const hashes = files.map(f => crypto.createHash('sha1').update(fs.readFileSync(path.join(dir, f))).digest('hex'));
+    const r = await fetch(`${MR}/version_files`, { method: 'POST', headers: { ...UA, 'Content-Type': 'application/json' }, body: JSON.stringify({ hashes, algorithm: 'sha1' }) });
+    const found = r.ok ? await r.json() : {};
+    for (let i = 0; i < files.length; i++) {
+      const m = srcMeta[kind + '/' + files[i]] || {}, v = found[hashes[i]], title = m.title || files[i];
+      if (!v) { res.unknown.push(title); continue; }
+      send('status', 'Przenoszę: ' + title);
+      try { await installProject(v.project_id, B, kind, { title, cosmetic: !!m.cosmetic }, seen); res.done++; } catch { res.missing.push(title); }
+    }
+  }
+  return res;
+});
+
 /* ---------- naprawa ---------- */
 ipcMain.handle('repair', (_, { instId, mode }) => {
   const inst = getInst(instId); if (!inst) throw new Error('Wybierz instalację'); if (gameRunning) throw new Error('Zamknij grę przed naprawą');
