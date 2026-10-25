@@ -68,3 +68,6 @@ summary{cursor:pointer;color:var(--mute)}details .list{margin-top:12px}details.c
 .subtabs button{background:none;color:var(--mute);padding:10px 20px;border-radius:10px 10px 0 0;border-bottom:2px solid transparent;transition:color .15s,background .15s}
 .subtabs button:hover{color:var(--text)}.subtabs button.on{color:var(--text);border-bottom-color:var(--accent);background:linear-gradient(180deg,transparent,var(--tint))}
 .subpanel{display:none}.subpanel.on{display:block;animation:in .2s ease}
+.list.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:10px}.list.grid .more{grid-column:1/-1}.list.grid>:not(.mod){grid-column:1/-1}
+.mod small.meta{color:var(--accent);font-size:12px}.instbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}.instbar .cap{margin:0}
+.presets{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}.presets .inst small{white-space:normal}

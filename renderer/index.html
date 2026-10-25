@@ -35,51 +35,58 @@
   <section id="inst" class="tab"><h1 data-i18n="insts"></h1><div id="insts" class="insts"></div>
     <label class="ram"><span><span data-i18n="ram"></span>: <b id="ramv">4 GB</b></span><input type="range" id="ram" min="1" max="16" step="1" value="4"></label></section>
   <section id="mods" class="tab"><h1 data-i18n="mods_title"></h1>
+    <div class="instbar"><span class="cap" data-i18n="mods_for"></span><div id="modinst" class="chips"></div></div>
     <div id="types" class="chips cats"></div>
     <div class="subtabs"><button class="on" data-sub="browse" data-i18n="sub_browse"></button><button data-sub="installed" data-i18n="sub_installed"></button><button data-sub="move" data-i18n="sub_move"></button></div>
-    <div class="subpanel on" data-sub="browse"><input class="search" id="q" data-ph="search_ph"><div id="modcats" class="chips cats"></div><div id="modlist" class="list"></div></div>
-    <div class="subpanel" data-sub="installed"><p class="hint" data-i18n="installedList"></p><div class="chips own"><button id="addown" class="chip" data-i18n="add_own"></button><button id="openf" class="chip" data-i18n="open_folder"></button></div><div id="instmods" class="list"></div></div>
+    <div class="subpanel on" data-sub="browse"><input class="search" id="q" data-ph="search_ph"><div id="modcats" class="chips cats"></div><div id="modlist" class="list grid"></div></div>
+    <div class="subpanel" data-sub="installed"><div class="chips own"><button id="addown" class="chip" data-i18n="add_own"></button><button id="openf" class="chip" data-i18n="open_folder"></button></div>
+      <input class="search" id="instfilter" data-ph="filter_ph"><p class="hint" id="instcount"></p><div id="instmods" class="list"></div></div>
     <div class="subpanel" data-sub="move"><p class="hint" data-i18n="mig_lead"></p><div id="migbox"></div><p id="migmsg" class="status"></p><div id="migres" class="list"></div></div>
   </section>
   <section id="opt" class="tab"><h1 data-i18n="opt_title"></h1><p class="lead" data-i18n="opt_lead"></p>
     <p class="hint"><span data-i18n="opt_for"></span>: <b id="optinst"></b></p>
-    <div id="presets" class="chips"></div><p id="presetd" class="hint"></p>
+    <div id="presets" class="insts presets"></div><p id="presetd" class="hint"></p>
     <label class="chk"><input type="checkbox" id="jvm" checked><span data-i18n="jvm"></span></label>
     <div class="chips"><button id="pack" class="play"></button><button id="autoram" class="chip"></button></div><p id="packout" class="status ok"></p></section>
   <section id="cos" class="tab"><h1 data-i18n="cos_title"></h1>
     <div class="subtabs"><button class="on" data-sub="featured" data-i18n="sub_featured"></button><button data-sub="search" data-i18n="sub_search"></button><button data-sub="mine" data-i18n="sub_mine"></button></div>
-    <div class="subpanel on" data-sub="featured"><div id="featured" class="list feat"></div></div>
-    <div class="subpanel" data-sub="search"><input class="search" id="qc" data-ph="cos_search"><div id="coslist" class="list"></div></div>
+    <div class="subpanel on" data-sub="featured"><div id="featured" class="list grid"></div></div>
+    <div class="subpanel" data-sub="search"><input class="search" id="qc" data-ph="cos_search"><div id="coslist" class="list grid"></div></div>
     <div class="subpanel" data-sub="mine"><p class="hint" data-i18n="cos_installed"></p><div id="instcos" class="list"></div></div>
   </section>
-  <section id="skins" class="tab"><h1 data-i18n="skins_title"></h1><div class="skinwrap">
-    <div class="skincard"><span class="cap" data-i18n="cur_skin"></span><canvas id="cur" width="16" height="32"></canvas></div>
-    <div class="skincard"><span class="cap" data-i18n="new_skin"></span><canvas id="nw" width="16" height="32"></canvas></div>
-    <div class="col"><p class="lead" data-i18n="skin_lead"></p><input type="file" id="skinfile" accept="image/png" hidden>
-      <div class="chips"><button id="pick" class="chip" data-i18n="pick_skin"></button><button class="chip on" data-v="classic" data-i18n="classic"></button><button class="chip" data-v="slim" data-i18n="slim"></button></div>
-      <button id="skinapply" class="play" disabled data-i18n="apply_skin"></button><p id="skinmsg" class="status"></p></div></div>
-    <div class="card"><h2 data-i18n="capes"></h2><div id="capes" class="chips"></div><p class="hint" data-i18n="cape_note"></p></div></section>
+  <section id="skins" class="tab"><h1 data-i18n="skins_title"></h1>
+    <div class="subtabs"><button class="on" data-sub="skin" data-i18n="sub_skin"></button><button data-sub="capes" data-i18n="sub_capes"></button></div>
+    <div class="subpanel on" data-sub="skin"><div class="skinwrap">
+      <div class="skincard"><span class="cap" data-i18n="cur_skin"></span><canvas id="cur" width="16" height="32"></canvas></div>
+      <div class="skincard"><span class="cap" data-i18n="new_skin"></span><canvas id="nw" width="16" height="32"></canvas></div>
+      <div class="col"><p class="lead" data-i18n="skin_lead"></p><input type="file" id="skinfile" accept="image/png" hidden>
+        <div class="chips"><button id="pick" class="chip" data-i18n="pick_skin"></button><button class="chip on" data-v="classic" data-i18n="classic"></button><button class="chip" data-v="slim" data-i18n="slim"></button></div>
+        <button id="skinapply" class="play" disabled data-i18n="apply_skin"></button><p id="skinmsg" class="status"></p></div></div></div>
+    <div class="subpanel" data-sub="capes"><div class="card"><h2 data-i18n="capes"></h2><div id="capes" class="chips"></div><p class="hint" data-i18n="cape_note"></p></div></div></section>
   <section id="console" class="tab wide"><h1 data-i18n="console_title"></h1>
     <div class="chips"><button id="logclear" class="chip" data-i18n="clear"></button><button id="logcopy" class="chip" data-i18n="copy"></button></div><pre id="log"></pre></section>
   <section id="news" class="tab"><h1 data-i18n="nav_news"></h1><p class="hint" id="appver2"></p><div id="newslist" class="list"></div></section>
   <section id="settings" class="tab"><h1 data-i18n="set_title"></h1>
-    <div class="card"><h2 data-i18n="onlaunch"></h2><div id="onlaunch" class="chips"></div><p class="hint" data-i18n="ol_hint"></p></div>
-    <div class="card"><h2 data-i18n="discord"></h2><label class="chk"><input type="checkbox" id="dc"><span data-i18n="dc_label"></span></label>
+    <div class="subtabs"><button class="on" data-sub="general" data-i18n="set_general"></button><button data-sub="look" data-i18n="set_look"></button><button data-sub="discord" data-i18n="discord"></button><button data-sub="javafix" data-i18n="set_javafix"></button><button data-sub="presets" data-i18n="set_presets"></button></div>
+    <div class="subpanel on" data-sub="general">
+      <div class="card"><h2 data-i18n="onlaunch"></h2><div id="onlaunch" class="chips"></div><p class="hint" data-i18n="ol_hint"></p></div>
+      <div class="card"><h2 data-i18n="language"></h2><div id="langs" class="chips"></div></div>
+      <p class="hint" id="appver"></p></div>
+    <div class="subpanel" data-sub="look"><div class="card"><h2 data-i18n="color"></h2><div id="swatches" class="chips"></div><label class="chk"><span data-i18n="custom"></span><input type="color" id="accent" value="#8b3dff"></label></div></div>
+    <div class="subpanel" data-sub="discord"><div class="card"><h2 data-i18n="discord"></h2><label class="chk"><input type="checkbox" id="dc"><span data-i18n="dc_label"></span></label>
       <label class="chk"><input type="checkbox" id="dcs" checked><span data-i18n="dc_server"></span></label>
       <input class="search" id="dcid" data-ph="dc_ph"><p class="hint" data-i18n="dc_hint"></p>
-      <input class="search" id="dcinv" data-ph="dc_inv_ph">
-      <input class="search" id="dcimg" data-ph="dc_img_ph"></div>
-    <div class="card"><h2 data-i18n="repair_title"></h2><p class="hint" data-i18n="repair_lead"></p><div id="repsel" class="chips"></div>
-      <div class="chips own"><button id="rep-quick" class="chip" data-i18n="repair_quick"></button><button id="rep-full" class="chip" data-i18n="repair_full"></button><button id="rep-options" class="chip" data-i18n="repair_opts"></button><button id="rep-mods" class="chip" data-i18n="repair_mods"></button></div>
-      <p id="repmsg" class="status"></p></div>
-    <div class="card"><h2 data-i18n="java_title"></h2><label class="chk"><input type="checkbox" id="autojava" checked><span data-i18n="java_auto"></span></label>
-      <button id="javanow" class="chip" data-i18n="java_now"></button><p id="javamsg" class="status"></p><p class="hint" data-i18n="java_hint"></p></div>
-    <div class="card"><h2 data-i18n="color"></h2><div id="swatches" class="chips"></div><label class="chk"><span data-i18n="custom"></span><input type="color" id="accent" value="#8b3dff"></label></div>
-    <div class="card"><h2 data-i18n="language"></h2><div id="langs" class="chips"></div></div>
-    <div class="card"><h2 data-i18n="pr_title"></h2><p class="hint" data-i18n="pr_lead"></p>
+      <input class="search" id="dcinv" data-ph="dc_inv_ph"><input class="search" id="dcimg" data-ph="dc_img_ph"></div></div>
+    <div class="subpanel" data-sub="javafix">
+      <div class="card"><h2 data-i18n="java_title"></h2><label class="chk"><input type="checkbox" id="autojava" checked><span data-i18n="java_auto"></span></label>
+        <button id="javanow" class="chip" data-i18n="java_now"></button><p id="javamsg" class="status"></p><p class="hint" data-i18n="java_hint"></p></div>
+      <div class="card"><h2 data-i18n="repair_title"></h2><p class="hint" data-i18n="repair_lead"></p><div id="repsel" class="chips"></div>
+        <div class="chips own"><button id="rep-quick" class="chip" data-i18n="repair_quick"></button><button id="rep-full" class="chip" data-i18n="repair_full"></button><button id="rep-options" class="chip" data-i18n="repair_opts"></button><button id="rep-mods" class="chip" data-i18n="repair_mods"></button></div>
+        <p id="repmsg" class="status"></p></div></div>
+    <div class="subpanel" data-sub="presets"><div class="card"><h2 data-i18n="pr_title"></h2><p class="hint" data-i18n="pr_lead"></p>
       <input class="search" id="prname" data-ph="pr_name"><button id="prsave" class="chip" data-i18n="pr_save"></button>
-      <div id="prlist" class="list"></div><p id="prmsg" class="status"></p></div>
-    <p class="hint" id="appver"></p></section>
+      <div id="prlist" class="list"></div><p id="prmsg" class="status"></p></div></div>
+  </section>
 </main></div>
 <dialog id="dlg"><h2 id="dlgt"></h2><div id="dlgb"></div><button id="dlgx" class="chip" data-i18n="close"></button></dialog>
 <script src="i18n.js"></script><script src="app.js"></script></body></html>

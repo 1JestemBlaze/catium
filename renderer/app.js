@@ -46,6 +46,7 @@ function renderInsts() {
     g.append(d);
   });
   g.append(el('button', { className: 'inst add', textContent: '+ ' + t('newInst'), onclick: openNew }));
+  const MI = $('#modinst'); MI.innerHTML = ''; insts.forEach(i => MI.append(chip(`${i.name} (${i.mc} ${LOADERS[i.loader]})`, i.id === active, () => { active = i.id; save({ active }); renderInsts(); renderOpt(); renderInstalled(); })));
   const q = $('#quick'); q.innerHTML = ''; insts.forEach(i => q.append(chip(i.name, i.id === active, () => { active = i.id; save({ active }); renderInsts(); renderOpt(); renderInstalled(); })));
 }
 async function openNew() {
@@ -74,6 +75,7 @@ async function renderInstalled() {
   for (const [box, kind, onlyCos] of [[$('#instmods'), kindOf, false], [$('#instcos'), 'mod', true]]) {
     box.innerHTML = ''; if (!i) { box.textContent = t('noInst'); continue; }
     let files = await c.instFiles({ id: i.id, kind }); if (onlyCos) files = files.filter(f => f.cosmetic);
+    if (!onlyCos) { $('#instcount').textContent = t('count').replace('{a}', files.filter(f => f.enabled).length).replace('{b}', files.length); const q = $('#instfilter').value.trim().toLowerCase(); if (q) files = files.filter(f => f.title.toLowerCase().includes(q)); }
     if (!files.length) { box.textContent = t('none'); continue; }
     files.forEach(f => { const r = el('div', { className: 'row' + (f.enabled ? '' : ' off') });
       r.append(el('b', { textContent: f.title, title: f.file }),
@@ -83,6 +85,7 @@ async function renderInstalled() {
   }
 }
 
+$('#instfilter').oninput = () => renderInstalled();
 const kindNow = () => ({ mod: 'mod', resourcepack: 'resourcepack', shader: 'shader', modpack: 'mod' }[mtype]);
 $('#addown').onclick = async () => { if (active && await c.instAdd({ id: active, kind: kindNow() })) renderInstalled(); };
 $('#openf').onclick = () => active && c.instOpen({ id: active, kind: kindNow() });
@@ -125,9 +128,10 @@ $$('.subtabs').forEach(bar => { const sec = bar.parentElement; bar.querySelector
   if (b.dataset.sub === 'installed' || b.dataset.sub === 'mine') renderInstalled(); if (b.dataset.sub === 'move') renderMig(); }); });
 
 /* ---- Modrinth ---- */
+const fmtNum = n => n >= 1e6 ? (n / 1e6).toFixed(1) + ' ' + t('m') : n >= 1e3 ? Math.round(n / 1e3) + ' ' + t('k') : String(n);
 function modCard(m, kind, cosmetic) {
   const d = el('div', { className: 'mod' }), tx = el('div');
-  tx.append(el('b', { textContent: m.title }), el('small', { textContent: m.desc }));
+  tx.append(el('b', { textContent: m.title }), el('small', { textContent: m.desc }), el('small', { className: 'meta', textContent: [m.author, m.downloads != null ? fmtNum(m.downloads) + ' ' + t('dl') : ''].filter(Boolean).join(' · ') }));
   const b = el('button', { textContent: t('install') });
   b.onclick = async () => {
     try {
@@ -174,8 +178,8 @@ tabBtn('cos').addEventListener('click', renderFeatured);
 function renderOpt() {
   const i = curInst(); $('#optinst').textContent = i ? `${i.name} (${i.mc} ${LOADERS[i.loader]})` : '-';
   const P = $('#presets'); P.innerHTML = '';
-  ['balanced', 'max', 'potato'].forEach(k => P.append(chip(t('p_' + k), k === preset, () => { preset = k; renderOpt(); })));
-  $('#presetd').textContent = t('d_' + preset);
+  ['balanced', 'max', 'potato'].forEach(k => { const d = el('button', { className: 'inst' + (k === preset ? ' on' : ''), onclick: () => { preset = k; renderOpt(); } }); d.append(el('b', { textContent: t('p_' + k) }), el('small', { textContent: t('d_' + k) })); P.append(d); });
+  $('#presetd').textContent = '';
 }
 $('#pack').onclick = async () => {
   if (!active) return $('#packout').textContent = t('noInst'); const b = $('#pack'); b.disabled = true; $('#packout').textContent = t('installing');

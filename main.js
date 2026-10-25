@@ -70,7 +70,7 @@ ipcMain.handle('mods:search', async (_, { query, type = 'mod', category, offset 
   if (type !== 'modpack' && mc) facets.push([`versions:${mc}`]);
   if (category) facets.push([`categories:${category}`]);
   const r = await getJson(`${MR}/search?query=${encodeURIComponent(query || '')}&limit=${limit}&offset=${offset}&index=${query ? 'relevance' : 'downloads'}&facets=${enc(facets)}`, UA);
-  return { total: r.total_hits, mods: r.hits.map(h => ({ id: h.project_id, title: h.title, desc: h.description, icon: h.icon_url })) };
+  return { total: r.total_hits, mods: r.hits.map(h => ({ id: h.project_id, title: h.title, desc: h.description, icon: h.icon_url, author: h.author, downloads: h.downloads })) };
 });
 async function installProject(project, inst, kind, meta, seen = new Set()) {
   if (seen.has(project)) return; seen.add(project);
