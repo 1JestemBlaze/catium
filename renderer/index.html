@@ -6,7 +6,6 @@
   <nav>
     <button data-tab="home" class="on"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg><span data-i18n="nav_home"></span></button>
     <button data-tab="inst"><svg viewBox="0 0 24 24"><path d="M5 4l14 8-14 8z"/></svg><span data-i18n="nav_inst"></span></button>
-    <button data-tab="mods"><svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg><span data-i18n="nav_mods"></span></button>
     <button data-tab="opt"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span data-i18n="nav_opt"></span></button>
     <button data-tab="cos"><svg viewBox="0 0 24 24"><path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></svg><span data-i18n="nav_cos"></span></button>
     <button data-tab="skins"><svg viewBox="0 0 24 24"><path d="M8 3l-5 3 2 4 3-1v12h8V9l3 1 2-4-5-3a4 4 0 0 1-8 0z"/></svg><span data-i18n="nav_skins"></span></button>
@@ -32,16 +31,22 @@
     <button id="play" class="playbig"><svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg><span id="playt"></span></button>
     <div class="bar"><i id="barfill"></i></div><p id="status" class="status"></p>
   </section>
-  <section id="inst" class="tab"><h1 data-i18n="insts"></h1><div id="insts" class="insts"></div>
-    <label class="ram"><span><span data-i18n="ram"></span>: <b id="ramv">4 GB</b></span><input type="range" id="ram" min="1" max="16" step="1" value="4"></label></section>
-  <section id="mods" class="tab"><h1 data-i18n="mods_title"></h1>
-    <div class="instbar"><span class="cap" data-i18n="mods_for"></span><div id="modinst" class="chips"></div></div>
-    <div id="types" class="chips cats"></div>
-    <div class="subtabs"><button class="on" data-sub="browse" data-i18n="sub_browse"></button><button data-sub="installed" data-i18n="sub_installed"></button><button data-sub="move" data-i18n="sub_move"></button></div>
-    <div class="subpanel on" data-sub="browse"><input class="search" id="q" data-ph="search_ph"><div id="modcats" class="chips cats"></div><div id="modlist" class="list grid"></div></div>
-    <div class="subpanel" data-sub="installed"><div class="chips own"><button id="addown" class="chip" data-i18n="add_own"></button><button id="openf" class="chip" data-i18n="open_folder"></button></div>
-      <input class="search" id="instfilter" data-ph="filter_ph"><p class="hint" id="instcount"></p><div id="instmods" class="list"></div></div>
-    <div class="subpanel" data-sub="move"><p class="hint" data-i18n="mig_lead"></p><div id="migbox"></div><p id="migmsg" class="status"></p><div id="migres" class="list"></div></div>
+  <section id="inst" class="tab">
+    <div id="instlist"><h1 data-i18n="insts"></h1><div id="insts" class="insts"></div>
+      <label class="ram"><span><span data-i18n="ram"></span>: <b id="ramv">4 GB</b></span><input type="range" id="ram" min="1" max="16" step="1" value="4"></label></div>
+    <div id="instdetail" hidden>
+      <div class="detailhead"><button id="backinst" class="chip" data-i18n="back"></button><h1 id="dettitle"></h1></div>
+      <div id="types" class="chips cats"></div>
+      <div id="contentpanes">
+        <div class="subtabs"><button class="on" data-sub="browse" data-i18n="sub_browse"></button><button data-sub="installed" data-i18n="sub_installed"></button><button data-sub="move" data-i18n="sub_move"></button></div>
+        <div class="subpanel on" data-sub="browse"><input class="search" id="q" data-ph="search_ph"><div id="modcats" class="chips cats"></div><div id="modlist" class="list grid"></div></div>
+        <div class="subpanel" data-sub="installed"><div class="chips own"><button id="addown" class="chip" data-i18n="add_own"></button><button id="openf" class="chip" data-i18n="open_folder"></button></div>
+          <input class="search" id="instfilter" data-ph="filter_ph"><p class="hint" id="instcount"></p><div id="instmods" class="list"></div></div>
+        <div class="subpanel" data-sub="move"><p class="hint" data-i18n="mig_lead"></p><div id="migbox"></div><p id="migmsg" class="status"></p><div id="migres" class="list"></div></div>
+      </div>
+      <div id="worldpane" hidden><div class="chips own"><button id="worldadd" class="chip" data-i18n="world_add"></button><button id="worldopen" class="chip" data-i18n="open_folder"></button></div><div id="worldlist" class="list"></div></div>
+    </div>
+    <div id="packview" hidden><div class="detailhead"><button id="backpacks" class="chip" data-i18n="back"></button><h1 data-i18n="mp_title"></h1></div><input class="search" id="qp" data-ph="search_ph"><div id="packlist" class="list grid"></div></div>
   </section>
   <section id="opt" class="tab"><h1 data-i18n="opt_title"></h1><p class="lead" data-i18n="opt_lead"></p>
     <p class="hint"><span data-i18n="opt_for"></span>: <b id="optinst"></b></p>

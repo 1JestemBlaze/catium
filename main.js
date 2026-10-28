@@ -7,7 +7,7 @@ const AdmZip = require('adm-zip'), crypto = require('crypto');
 
 const UA = { 'User-Agent': 'Catium/0.3.0 (launcher)' };
 const MR = 'https://api.modrinth.com/v2', MC = 'https://api.minecraftservices.com/minecraft/profile';
-const KIND_DIR = { mod: 'mods', resourcepack: 'resourcepacks', shader: 'shaderpacks' };
+const KIND_DIR = { mod: 'mods', resourcepack: 'resourcepacks', shader: 'shaderpacks', world: 'saves' };
 const BASE = ['fabric-api', 'sodium', 'lithium', 'ferrite-core', 'modernfix', 'immediatelyfast', 'entityculling'];
 const MAXM = [...BASE, 'sodium-extra', 'dynamic-fps', 'moreculling', 'krypton'];
 const FAST = { graphicsMode: 0, fancyGraphics: 'false', ao: 'false', particles: 2, maxFps: 260, enableVsync: 'false', entityShadows: 'false', biomeBlendRadius: 1, bobView: 'false' };
@@ -160,6 +160,30 @@ ipcMain.handle('mods:migrate', async (_, { from, to }) => {
     }
   }
   return res;
+});
+
+
+/* ---------- światy ---------- */
+const dirSize = d => { let n = 0; for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); try { n += e.isDirectory() ? dirSize(p) : fs.statSync(p).size; } catch {} } return n; };
+ipcMain.handle('world:list', (_, { id }) => {
+  const dir = path.join(instDir(id), 'saves'); if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory() && fs.existsSync(path.join(dir, e.name, 'level.dat')))
+    .map(e => { const p = path.join(dir, e.name); return { name: e.name, size: dirSize(p), mtime: fs.statSync(path.join(p, 'level.dat')).mtimeMs }; }).sort((a, b) => b.mtime - a.mtime);
+});
+ipcMain.handle('world:delete', (_, { id, name }) => { const t = safeIn(path.join(instDir(id), 'saves'), name); if (!t) throw new Error('Zła nazwa świata'); fs.rmSync(t, { recursive: true, force: true }); });
+ipcMain.handle('world:backup', async (_, { id, name }) => {
+  const src = safeIn(path.join(instDir(id), 'saves'), name); if (!src || !fs.existsSync(src)) throw new Error('Brak świata');
+  const r = await dialog.showSaveDialog(win, { defaultPath: name + '.zip', filters: [{ name: 'ZIP', extensions: ['zip'] }] }); if (r.canceled) return false;
+  const z = new AdmZip(); z.addLocalFolder(src, name); z.writeZip(r.filePath); return true;
+});
+ipcMain.handle('world:import', async (_, { id }) => {
+  const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'ZIP', extensions: ['zip'] }] }); if (r.canceled) return null;
+  const zip = new AdmZip(r.filePaths[0]), lv = zip.getEntries().find(e => /(^|\/)level\.dat$/.test(e.entryName)); if (!lv) throw new Error('W archiwum nie ma świata (brak pliku level.dat)');
+  const prefix = lv.entryName.slice(0, -'level.dat'.length), base = prefix.replace(/\/$/, '').split('/').pop() || path.basename(r.filePaths[0], '.zip');
+  const saves = path.join(instDir(id), 'saves'); let name = base, n = 1; while (fs.existsSync(path.join(saves, name))) name = base + ' (' + (++n) + ')';
+  const dest = path.join(saves, name);
+  for (const e of zip.getEntries()) { if (e.isDirectory || !e.entryName.startsWith(prefix)) continue; const t = safeIn(dest, e.entryName.slice(prefix.length)); if (!t) continue; fs.mkdirSync(path.dirname(t), { recursive: true }); fs.writeFileSync(t, e.getData()); }
+  return name;
 });
 
 /* ---------- naprawa ---------- */

@@ -13,7 +13,7 @@ const updNow = () => { const d = Math.floor((Date.now() - gStart) / 1000), p = n
 c.on('game', g => { clearInterval(tick); if (g.running) { gStart = g.start; $('#now').hidden = false; updNow(); tick = setInterval(updNow, 1000); } else { $('#now').hidden = true; loadInsts(); } });
 const curInst = () => insts.find(i => i.id === active);
 
-$$('nav button').forEach(b => b.onclick = () => { $$('nav button,.tab').forEach(x => x.classList.remove('on')); b.classList.add('on'); $('#' + b.dataset.tab).classList.add('on'); });
+$$('nav button').forEach(b => b.onclick = () => { $$('nav button,.tab').forEach(x => x.classList.remove('on')); b.classList.add('on'); $('#' + b.dataset.tab).classList.add('on'); if (b.dataset.tab === 'inst') showView('list'); });
 
 /* ---- okienka ---- */
 function openModal(title, node) { const d = $('#dlg'); d.onclose = null; $('#dlgt').textContent = title; $('#dlgb').replaceChildren(node); d.showModal(); return d; }
@@ -36,17 +36,17 @@ async function versionPicker() {
 async function loadInsts() {
   cfg = await c.getSettings(); insts = cfg.instances || [];
   active = insts.some(i => i.id === cfg.active) ? cfg.active : insts[0]?.id || null; renderInsts(); renderOpt(); renderInstalled(); renderMig();
+  if (view === 'detail') { if (!curInst()) showView('list'); else $('#dettitle').textContent = instLabel(curInst()); }
 }
 function renderInsts() {
   const g = $('#insts'); g.innerHTML = '';
   insts.forEach(i => {
     const d = el('div', { className: 'inst' + (i.id === active ? ' on' : ''), onclick: () => { active = i.id; save({ active }); renderInsts(); renderOpt(); renderInstalled(); renderMig(); } });
-    d.append(el('b', { textContent: i.name }), el('small', { textContent: `${i.mc} · ${LOADERS[i.loader]}` }), el('small', { textContent: fmtPlay(i.playtime) }),
+    d.append(el('b', { textContent: i.name }), el('small', { textContent: `${i.mc} · ${LOADERS[i.loader]}` }), el('small', { textContent: fmtPlay(i.playtime) }), instBtns(i),
       el('button', { className: 'x', textContent: '×', onclick: async e => { e.stopPropagation(); if (confirm(t('confirmDel'))) { await c.instDelete(i.id); await loadInsts(); } } }));
     g.append(d);
   });
-  g.append(el('button', { className: 'inst add', textContent: '+ ' + t('newInst'), onclick: openNew }));
-  const MI = $('#modinst'); MI.innerHTML = ''; insts.forEach(i => MI.append(chip(`${i.name} (${i.mc} ${LOADERS[i.loader]})`, i.id === active, () => { active = i.id; save({ active }); renderInsts(); renderOpt(); renderInstalled(); })));
+  g.append(el('button', { className: 'inst add', textContent: '+ ' + t('newInst'), onclick: openNew }), el('button', { className: 'inst add', textContent: '+ ' + t('mp_new'), onclick: () => { showView('packs'); runPacks?.(true); } }));
   const q = $('#quick'); q.innerHTML = ''; insts.forEach(i => q.append(chip(i.name, i.id === active, () => { active = i.id; save({ active }); renderInsts(); renderOpt(); renderInstalled(); })));
 }
 async function openNew() {
@@ -71,7 +71,7 @@ function pickInstance() {
 
 /* ---- zainstalowane (włącz/wyłącz/usuń) ---- */
 async function renderInstalled() {
-  const i = curInst(), kindOf = { mod: 'mod', resourcepack: 'resourcepack', shader: 'shader', modpack: 'mod' }[mtype];
+  const i = curInst(), kindOf = { mod: 'mod', resourcepack: 'resourcepack', shader: 'shader', modpack: 'mod' }[mtype] || 'mod';
   for (const [box, kind, onlyCos] of [[$('#instmods'), kindOf, false], [$('#instcos'), 'mod', true]]) {
     box.innerHTML = ''; if (!i) { box.textContent = t('noInst'); continue; }
     let files = await c.instFiles({ id: i.id, kind }); if (onlyCos) files = files.filter(f => f.cosmetic);
@@ -122,6 +122,28 @@ async function runMig() {
   catch (e) { msg.textContent = e.message; }
   migBusy = false; renderMig();
 }
+const instBtns = i => { const r = el('div', { className: 'instbtns' });
+  [['mod', 'b_mods'], ['resourcepack', 'b_res'], ['shader', 'b_shader'], ['world', 'b_world']].forEach(([k, l]) => r.append(el('button', { className: 'mini', textContent: t(l), onclick: e => { e.stopPropagation(); openDetail(i.id, k); } }))); return r; };
+let view = 'list';
+function showView(v) { view = v; $('#instlist').hidden = v !== 'list'; $('#instdetail').hidden = v !== 'detail'; $('#packview').hidden = v !== 'packs'; }
+function openDetail(id, type) {
+  active = id; save({ active }); mtype = type; cat = ''; migFrom = id; migTo = null; migStep = 2;
+  showView('detail'); $('#dettitle').textContent = instLabel(curInst()); renderInsts(); renderOpt(); renderTypes(); $('#instdetail .subtabs [data-sub=browse]').click(); renderMig(); renderInstalled();
+  if (type === 'world') renderWorlds(); else runMods?.(true);
+}
+$('#backinst').onclick = () => showView('list'); $('#backpacks').onclick = () => showView('list');
+const fmtSize = b => b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b >= 1e6 ? Math.round(b / 1e6) + ' MB' : Math.max(1, Math.round(b / 1e3)) + ' KB';
+async function renderWorlds() {
+  const L = $('#worldlist'); L.innerHTML = ''; const i = curInst(); if (!i) return;
+  const ws = await c.worldList({ id: i.id }); if (!ws.length) { L.textContent = t('world_none'); return; }
+  ws.forEach(w => { const r = el('div', { className: 'row' });
+    r.append(el('b', { textContent: w.name, title: w.name }), el('small', { textContent: `${fmtSize(w.size)} · ${new Date(w.mtime).toLocaleDateString(cfg.lang === 'en' ? 'en-GB' : 'pl-PL')}` }),
+      el('button', { textContent: t('world_backup'), onclick: async () => { try { await c.worldBackup({ id: i.id, name: w.name }); } catch (e) { alert(e.message); } } }),
+      el('button', { textContent: t('remove'), onclick: async () => { if (!confirm(t('world_del_confirm').replace('{n}', w.name))) return; await c.worldDelete({ id: i.id, name: w.name }); renderWorlds(); } })); L.append(r); });
+}
+$('#worldadd').onclick = async () => { try { if (await c.worldImport({ id: active })) renderWorlds(); } catch (e) { alert(e.message); } };
+$('#worldopen').onclick = () => active && c.instOpen({ id: active, kind: 'world' });
+
 $$('.subtabs').forEach(bar => { const sec = bar.parentElement; bar.querySelectorAll('button').forEach(b => b.onclick = () => {
   bar.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
   sec.querySelectorAll(':scope > .subpanel').forEach(p => p.classList.toggle('on', p.dataset.sub === b.dataset.sub));
@@ -156,14 +178,14 @@ function browser({ input, list, tab, getType, getCat, cosmetic }) {
     busy = false;
   }
   more.onclick = () => run(false); input.oninput = () => { clearTimeout(tm); tm = setTimeout(() => run(true), 300); };
-  tabBtn(tab).addEventListener('click', () => run(true)); return run;
+  return run;
 }
-let cat = '', runMods;
+let cat = '', runMods, runPacks;
 function renderTypes() {
   const T = $('#types'), C = $('#modcats'); T.innerHTML = ''; C.innerHTML = '';
-  ['mod', 'resourcepack', 'shader', 'modpack'].forEach(k => { const b = chip(t('type_' + k), k === mtype, () => { mtype = k; renderTypes(); runMods?.(true); renderInstalled(); }); T.append(b); });
-  C.hidden = mtype !== 'mod';
-  ['', 'optimization', 'technology', 'magic', 'adventure', 'utility', 'decoration', 'worldgen', 'library'].forEach(v => { const b = chip(t('cat_' + (v || 'all')), v === cat, () => { cat = v; renderTypes(); runMods?.(true); }); C.append(b); });
+  ['mod', 'resourcepack', 'shader', 'world'].forEach(k => T.append(chip(t('type_' + k), k === mtype, () => { mtype = k; cat = ''; renderTypes(); $('#instdetail .subtabs [data-sub=browse]').click(); if (k === 'world') renderWorlds(); else { runMods?.(true); renderInstalled(); } })));
+  const w = mtype === 'world'; $('#contentpanes').hidden = w; $('#worldpane').hidden = !w; C.hidden = mtype !== 'mod'; $('#instdetail [data-sub=move]').hidden = mtype !== 'mod';
+  ['', 'optimization', 'technology', 'magic', 'adventure', 'utility', 'decoration', 'worldgen', 'library'].forEach(v => C.append(chip(t('cat_' + (v || 'all')), v === cat, () => { cat = v; renderTypes(); runMods?.(true); })));
 }
 
 const FEATURED = ['Ears', '3D Skin Layers', 'Capes', 'Emotecraft', 'Visuality', 'Falling Leaves', 'LambDynamicLights', 'Continuity'];
@@ -316,8 +338,9 @@ $('#updb').onclick = () => c.installUpdate();
   cfg = await c.getSettings(); setAccent(cfg.accent || '#8b3dff');
   $('#ram').value = cfg.ram || 4; $('#ramv').textContent = (cfg.ram || 4) + ' GB'; $('#dc').checked = !!cfg.discord; $('#autojava').checked = cfg.autoJava !== false; $('#dcs').checked = cfg.discordServer !== false; $('#dcid').value = cfg.discordId || '';
   c.appVersion().then(v => { $('#appver').textContent = 'Catium ' + v; $('#appver2').textContent = 'Catium ' + v; }); $('#dcinv').value = cfg.discordInvite || ''; $('#dcimg').value = cfg.discordImage || '';
-  runMods = browser({ input: $('#q'), list: $('#modlist'), tab: 'mods', getType: () => mtype, getCat: () => mtype === 'mod' ? cat : '' });
-  browser({ input: $('#qc'), list: $('#coslist'), tab: 'cos', getType: () => 'mod', getCat: () => 'cosmetic', cosmetic: true });
+  runMods = browser({ input: $('#q'), list: $('#modlist'), getType: () => mtype, getCat: () => mtype === 'mod' ? cat : '' });
+  runPacks = browser({ input: $('#qp'), list: $('#packlist'), getType: () => 'modpack', getCat: () => '' });
+  const runCos = browser({ input: $('#qc'), list: $('#coslist'), getType: () => 'mod', getCat: () => 'cosmetic', cosmetic: true }); tabBtn('cos').addEventListener('click', () => runCos(true));
   applyLang(); await loadInsts(); c.accRestore().then(r => { if (r) setSession(r.type, r.name); });
   if (!insts.length) openNew();
 })();
