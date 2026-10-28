@@ -74,3 +74,9 @@ summary{cursor:pointer;color:var(--mute)}details .list{margin-top:12px}details.c
 .insts{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}.instbtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .mini{background:var(--hi2);padding:5px 11px;font-size:12px;border-radius:8px;transition:background .12s}.mini:hover{background:var(--accent);color:var(--on)}
 .detailhead{display:flex;align-items:center;gap:16px;margin-bottom:8px}.detailhead h1{margin:0;font-size:26px}.row small{color:var(--mute);font-size:12px;white-space:nowrap}
+.insts{grid-template-columns:repeat(auto-fill,minmax(290px,1fr))}.inst{padding:16px}.inst>b{font-size:17px}
+.instbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.tilebtn{display:flex;align-items:center;gap:10px;padding:11px 14px;font-size:14px;background:var(--hi2);border:1px solid transparent;border-radius:12px;justify-content:flex-start;transition:background .12s,border-color .12s}
+.tilebtn svg{width:19px;height:19px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tilebtn:hover{background:var(--tint);border-color:var(--accent)}
+.mod button.done{background:transparent;color:var(--ok);border:1px solid var(--ok);opacity:1}

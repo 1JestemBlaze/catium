@@ -57,6 +57,19 @@ ipcMain.handle('inst:files', (_, { id, kind }) => {
     return { file: f, enabled: !f.endsWith('.disabled'), title: m.title || base, cosmetic: !!m.cosmetic };
   });
 });
+ipcMain.handle('inst:projects', async (_, { id, kind }) => {
+  const dir = path.join(instDir(id), KIND_DIR[kind]); if (!fs.existsSync(dir)) return [];
+  const meta = readMeta(id), out = new Set(), todo = [], key = f => kind + '/' + f.replace(/\.disabled$/, '');
+  for (const f of fs.readdirSync(dir).filter(f => /\.(jar|zip)(\.disabled)?$/.test(f))) { const m = meta[key(f)]; if (m?.project) out.add(m.project); else if (!m?.noproj) todo.push(f); }
+  if (todo.length) {
+    try {
+      const hashes = todo.map(f => crypto.createHash('sha1').update(fs.readFileSync(path.join(dir, f))).digest('hex'));
+      const r = await fetch(`${MR}/version_files`, { method: 'POST', headers: { ...UA, 'Content-Type': 'application/json' }, body: JSON.stringify({ hashes, algorithm: 'sha1' }) });
+      if (r.ok) { const found = await r.json(); todo.forEach((f, i) => { const v = found[hashes[i]], k = key(f); meta[k] = { ...(meta[k] || { title: f.replace(/\.disabled$/, '') }), ...(v ? { project: v.project_id } : { noproj: true }) }; if (v) out.add(v.project_id); }); writeMeta(id, meta); }
+    } catch {}
+  }
+  return [...out];
+});
 ipcMain.handle('inst:toggle', (_, { id, kind, file }) => {
   const d = path.join(instDir(id), KIND_DIR[kind]);
   fs.renameSync(path.join(d, file), path.join(d, file.endsWith('.disabled') ? file.slice(0, -9) : file + '.disabled'));
@@ -81,7 +94,7 @@ async function installProject(project, inst, kind, meta, seen = new Set()) {
   if (!vers.length) throw new Error(`${project}: brak wersji dla ${inst.mc}`);
   const f = vers[0].files.find(x => x.primary) || vers[0].files[0];
   await download(f.url, path.join(instDir(inst.id), KIND_DIR[kind], f.filename));
-  if (meta) { const m = readMeta(inst.id); m[kind + '/' + f.filename] = meta; writeMeta(inst.id, m); }
+  { const m = readMeta(inst.id); m[kind + '/' + f.filename] = { ...(meta || { title: f.filename }), project: vers[0].project_id }; writeMeta(inst.id, m); }
   if (kind === 'mod') for (const d of vers[0].dependencies || []) if (d.dependency_type === 'required' && d.project_id) await installProject(d.project_id, inst, 'mod', null, seen).catch(() => {});
   return f.filename;
 }

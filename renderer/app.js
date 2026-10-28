@@ -122,8 +122,11 @@ async function runMig() {
   catch (e) { msg.textContent = e.message; }
   migBusy = false; renderMig();
 }
+const TILE_ICONS = { mod: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5"/>', resourcepack: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M3 17l5-5 4 4 3-3 6 6"/>',
+  shader: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>', world: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/>' };
 const instBtns = i => { const r = el('div', { className: 'instbtns' });
-  [['mod', 'b_mods'], ['resourcepack', 'b_res'], ['shader', 'b_shader'], ['world', 'b_world']].forEach(([k, l]) => r.append(el('button', { className: 'mini', textContent: t(l), onclick: e => { e.stopPropagation(); openDetail(i.id, k); } }))); return r; };
+  [['mod', 'b_mods'], ['resourcepack', 'b_res'], ['shader', 'b_shader'], ['world', 'b_world']].forEach(([k, l]) => { const b = el('button', { className: 'tilebtn', onclick: e => { e.stopPropagation(); openDetail(i.id, k); } });
+    b.innerHTML = '<svg viewBox="0 0 24 24">' + TILE_ICONS[k] + '</svg><span></span>'; b.querySelector('span').textContent = t(l); r.append(b); }); return r; };
 let view = 'list';
 function showView(v) { view = v; $('#instlist').hidden = v !== 'list'; $('#instdetail').hidden = v !== 'detail'; $('#packview').hidden = v !== 'packs'; }
 function openDetail(id, type) {
@@ -147,33 +150,37 @@ $('#worldopen').onclick = () => active && c.instOpen({ id: active, kind: 'world'
 $$('.subtabs').forEach(bar => { const sec = bar.parentElement; bar.querySelectorAll('button').forEach(b => b.onclick = () => {
   bar.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
   sec.querySelectorAll(':scope > .subpanel').forEach(p => p.classList.toggle('on', p.dataset.sub === b.dataset.sub));
-  if (b.dataset.sub === 'installed' || b.dataset.sub === 'mine') renderInstalled(); if (b.dataset.sub === 'move') renderMig(); }); });
+  if (b.dataset.sub === 'installed' || b.dataset.sub === 'mine') renderInstalled(); if (b.dataset.sub === 'move') renderMig(); if (b.dataset.sub === 'browse' && view === 'detail' && mtype !== 'world') runMods?.(true); }); });
 
 /* ---- Modrinth ---- */
 const fmtNum = n => n >= 1e6 ? (n / 1e6).toFixed(1) + ' ' + t('m') : n >= 1e3 ? Math.round(n / 1e3) + ' ' + t('k') : String(n);
-function modCard(m, kind, cosmetic) {
+function modCard(m, kind, cosmetic, opts = {}) {
   const d = el('div', { className: 'mod' }), tx = el('div');
   tx.append(el('b', { textContent: m.title }), el('small', { textContent: m.desc }), el('small', { className: 'meta', textContent: [m.author, m.downloads != null ? fmtNum(m.downloads) + ' ' + t('dl') : ''].filter(Boolean).join(' · ') }));
-  const b = el('button', { textContent: t('install') });
+  const b = el('button', { textContent: opts.installed ? '✓ ' + t('installed') : t('install'), className: opts.installed ? 'done' : '', disabled: !!opts.installed });
+  const markDone = () => { b.textContent = '✓ ' + t('installed'); b.className = 'done'; b.disabled = true; };
   b.onclick = async () => {
     try {
-      if (kind === 'modpack') { b.disabled = true; b.textContent = t('installing'); const i = await c.packInstall({ project: m.id, name: m.title }); await loadInsts(); b.textContent = t('installed'); return; }
-      const inst = await pickInstance(); if (!inst) return;
+      if (kind === 'modpack') { b.disabled = true; b.textContent = t('installing'); await c.packInstall({ project: m.id, name: m.title }); await loadInsts(); markDone(); return; }
+      const inst = opts.fixedId ? insts.find(i => i.id === opts.fixedId) : await pickInstance(); if (!inst) return;
       if (kind === 'mod' && inst.loader === 'vanilla') return alert(t('needLoader'));
       b.disabled = true; b.textContent = t('installing');
-      await c.install({ id: m.id, instId: inst.id, kind, title: m.title, cosmetic }); b.textContent = t('installed'); renderInstalled();
+      if ((await c.instProjects({ id: inst.id, kind })).includes(m.id)) { markDone(); return; }
+      await c.install({ id: m.id, instId: inst.id, kind, title: m.title, cosmetic }); markDone(); renderInstalled();
     } catch (e) { b.textContent = t('err'); b.title = e.message; b.disabled = false; }
   };
   d.append(m.icon ? el('img', { src: m.icon, alt: '' }) : el('span', { className: 'ph' }), tx, b); return d;
 }
-function browser({ input, list, tab, getType, getCat, cosmetic }) {
+function browser({ input, list, getType, getCat, cosmetic, getFixed }) {
   let off = 0, tm, busy = false; const more = el('button', { className: 'chip more', textContent: t('more') });
   async function run(reset) {
     if (busy) return; busy = true; if (reset) { off = 0; list.innerHTML = ''; }
     try {
       const type = getType(), r = await c.search({ query: input.value, type, category: getCat(), offset: off, mc: curInst()?.mc });
       if (!r.mods.length && !off) list.textContent = t('noRes');
-      r.mods.forEach(m => list.append(modCard(m, type, cosmetic))); off += r.mods.length; more.remove(); more.textContent = t('more'); if (off < r.total) list.append(more);
+      const fixed = getFixed?.(), kd = { mod: 'mod', resourcepack: 'resourcepack', shader: 'shader' }[type];
+      const have = new Set(fixed && kd ? await c.instProjects({ id: fixed, kind: kd }) : []);
+      r.mods.forEach(m => list.append(modCard(m, type, cosmetic, { fixedId: fixed, installed: have.has(m.id) }))); off += r.mods.length; more.remove(); more.textContent = t('more'); if (off < r.total) list.append(more);
     } catch (e) { list.textContent = t('fail') + e.message; }
     busy = false;
   }
@@ -338,7 +345,7 @@ $('#updb').onclick = () => c.installUpdate();
   cfg = await c.getSettings(); setAccent(cfg.accent || '#8b3dff');
   $('#ram').value = cfg.ram || 4; $('#ramv').textContent = (cfg.ram || 4) + ' GB'; $('#dc').checked = !!cfg.discord; $('#autojava').checked = cfg.autoJava !== false; $('#dcs').checked = cfg.discordServer !== false; $('#dcid').value = cfg.discordId || '';
   c.appVersion().then(v => { $('#appver').textContent = 'Catium ' + v; $('#appver2').textContent = 'Catium ' + v; }); $('#dcinv').value = cfg.discordInvite || ''; $('#dcimg').value = cfg.discordImage || '';
-  runMods = browser({ input: $('#q'), list: $('#modlist'), getType: () => mtype, getCat: () => mtype === 'mod' ? cat : '' });
+  runMods = browser({ input: $('#q'), list: $('#modlist'), getFixed: () => active, getType: () => mtype, getCat: () => mtype === 'mod' ? cat : '' });
   runPacks = browser({ input: $('#qp'), list: $('#packlist'), getType: () => 'modpack', getCat: () => '' });
   const runCos = browser({ input: $('#qc'), list: $('#coslist'), getType: () => 'mod', getCat: () => 'cosmetic', cosmetic: true }); tabBtn('cos').addEventListener('click', () => runCos(true));
   applyLang(); await loadInsts(); c.accRestore().then(r => { if (r) setSession(r.type, r.name); });
