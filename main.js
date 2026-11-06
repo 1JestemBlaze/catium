@@ -16,6 +16,8 @@ const PRESETS = {
   max: { mods: MAXM, opts: { ...FAST, renderDistance: 8, simulationDistance: 6, mipmapLevels: 2, entityDistanceScaling: '0.75', renderClouds: '"false"' } },
   potato: { mods: MAXM, opts: { ...FAST, renderDistance: 5, simulationDistance: 5, mipmapLevels: 0, entityDistanceScaling: '0.5', renderClouds: '"false"' } }
 };
+const FBASE = ['embeddium', 'modernfix', 'ferrite-core', 'entityculling', 'immediatelyfast'], FMAX = [...FBASE, 'dynamic-fps', 'moreculling', 'canary'];
+PRESETS.balanced.forgeMods = FBASE; PRESETS.max.forgeMods = FMAX; PRESETS.potato.forgeMods = FMAX;
 const JVM_FLAGS = ['-XX:+UnlockExperimentalVMOptions', '-XX:+UseG1GC', '-XX:MaxGCPauseMillis=50', '-XX:G1NewSizePercent=20', '-XX:G1ReservePercent=20', '-XX:G1HeapRegionSize=32M', '-XX:+DisableExplicitGC'];
 
 let gameStart = 0, gameInst = null;
@@ -34,9 +36,9 @@ const safeIn = (dir, p) => { const t = path.resolve(dir, p); return t.startsWith
 async function download(url, file) { fs.mkdirSync(path.dirname(file), { recursive: true }); const r = await fetch(url, { headers: UA }); if (!r.ok) throw new Error('Pobieranie: ' + r.status); fs.writeFileSync(file, Buffer.from(await r.arrayBuffer())); }
 
 /* ---------- instalacje ---------- */
-function createInst(name, mc, loader) {
+function createInst(name, mc, loader, loaderVersion) {
   const id = (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'inst') + '-' + Date.now().toString(36);
-  const inst = { id, name, mc, loader }; fs.mkdirSync(instDir(id), { recursive: true });
+  const inst = { id, name, mc, loader, ...(loaderVersion ? { loaderVersion } : {}) }; fs.mkdirSync(instDir(id), { recursive: true });
   writeCfg({ instances: [...readCfg().instances, inst], active: id }); return inst;
 }
 const metaFile = id => path.join(instDir(id), 'catium.json');
@@ -77,9 +79,9 @@ ipcMain.handle('inst:toggle', (_, { id, kind, file }) => {
 ipcMain.handle('inst:remove', (_, { id, kind, file }) => fs.rmSync(path.join(instDir(id), KIND_DIR[kind], file), { force: true }));
 
 /* ---------- Modrinth ---------- */
-ipcMain.handle('mods:search', async (_, { query, type = 'mod', category, offset = 0, mc, limit = 20 }) => {
+ipcMain.handle('mods:search', async (_, { query, type = 'mod', category, offset = 0, mc, limit = 20, loader }) => {
   const facets = [[`project_type:${type}`]];
-  if (type === 'mod') facets.push(['categories:fabric', 'categories:quilt']);
+  if (type === 'mod') facets.push((({ fabric: ['fabric'], quilt: ['quilt', 'fabric'], forge: ['forge'] })[loader] || ['fabric', 'quilt', 'forge']).map(l => 'categories:' + l));
   if (type !== 'modpack' && mc) facets.push([`versions:${mc}`]);
   if (category) facets.push([`categories:${category}`]);
   const r = await getJson(`${MR}/search?query=${encodeURIComponent(query || '')}&limit=${limit}&offset=${offset}&index=${query ? 'relevance' : 'downloads'}&facets=${enc(facets)}`, UA);
@@ -87,7 +89,7 @@ ipcMain.handle('mods:search', async (_, { query, type = 'mod', category, offset 
 });
 async function installProject(project, inst, kind, meta, seen = new Set()) {
   if (seen.has(project)) return; seen.add(project);
-  const loaders = inst.loader === 'quilt' ? ['quilt', 'fabric'] : ['fabric'];
+  const loaders = inst.loader === 'quilt' ? ['quilt', 'fabric'] : inst.loader === 'forge' ? ['forge'] : ['fabric'];
   const url = q => `${MR}/project/${project}/version${q}`;
   let vers = await getJson(url(`?game_versions=${enc([inst.mc])}` + (kind === 'mod' ? `&loaders=${enc(loaders)}` : '')), UA);
   if (!vers.length && kind !== 'mod') vers = await getJson(url(''), UA);
@@ -105,9 +107,9 @@ ipcMain.handle('pack:install', async (_, { project, name }) => {
   const f = v.files.find(x => x.filename.endsWith('.mrpack')); send('status', 'Pobieram modpack...');
   const zip = new AdmZip(Buffer.from(await (await fetch(f.url, { headers: UA })).arrayBuffer()));
   const idx = JSON.parse(zip.readAsText('modrinth.index.json')), d = idx.dependencies || {};
-  const loader = d['fabric-loader'] ? 'fabric' : d['quilt-loader'] ? 'quilt' : null;
-  if (!loader) throw new Error('Ten modpack wymaga Forge/NeoForge, a to nie jest jeszcze obsługiwane.');
-  const inst = createInst(idx.name || name, d.minecraft, loader), dir = instDir(inst.id);
+  const loader = d['fabric-loader'] ? 'fabric' : d['quilt-loader'] ? 'quilt' : d.forge ? 'forge' : null;
+  if (!loader) throw new Error('Ten modpack wymaga NeoForge, a to nie jest jeszcze obsługiwane.');
+  const inst = createInst(idx.name || name, d.minecraft, loader, d.forge), dir = instDir(inst.id);
   let n = 0;
   for (const file of idx.files || []) {
     if (file.env?.client === 'unsupported') continue;
@@ -128,8 +130,8 @@ function writeOptions(id, opts) {
 }
 ipcMain.handle('opt:install', async (_, { instId, preset }) => {
   const inst = getInst(instId), p = PRESETS[preset] || PRESETS.balanced, done = [], failed = [];
-  if (!inst || inst.loader === 'vanilla') throw new Error('Wybierz instalację Fabric lub Quilt.');
-  for (const m of p.mods) { send('status', `Instaluję ${m}...`); try { done.push(await installProject(m, inst, 'mod', { title: m })); } catch (e) { failed.push(e.message); } }
+  if (!inst || inst.loader === 'vanilla') throw new Error('Wybierz instalację Fabric, Quilt lub Forge.');
+  for (const m of (inst.loader === 'forge' ? p.forgeMods : p.mods)) { send('status', `Instaluję ${m}...`); try { done.push(await installProject(m, inst, 'mod', { title: m })); } catch (e) { failed.push(e.message); } }
   writeOptions(instId, p.opts); return { done, failed };
 });
 ipcMain.handle('sys:ram', () => Math.round(os.totalmem() / 1e9));
@@ -205,12 +207,36 @@ ipcMain.handle('repair', (_, { instId, mode }) => {
   const rm = p => fs.rmSync(p, { recursive: true, force: true }), root = dataDir(), vdir = path.join(root, 'versions');
   if (mode === 'quick' || mode === 'full') {
     rm(path.join(vdir, inst.mc)); rm(path.join(root, 'natives'));
-    if (fs.existsSync(vdir)) fs.readdirSync(vdir).filter(d => /^(fabric|quilt)-loader-/.test(d) && d.endsWith('-' + inst.mc)).forEach(d => rm(path.join(vdir, d)));
+    if (fs.existsSync(vdir)) fs.readdirSync(vdir).filter(d => (/^(fabric|quilt)-loader-/.test(d) && d.endsWith('-' + inst.mc)) || (/forge/i.test(d) && d.startsWith(inst.mc + '-'))).forEach(d => rm(path.join(vdir, d)));
   }
   if (mode === 'full') { rm(path.join(root, 'libraries')); rm(path.join(root, 'assets', 'indexes')); rm(path.join(ud(), 'java')); }
   if (mode === 'options') { const f = path.join(instDir(instId), 'options.txt'); if (fs.existsSync(f)) fs.renameSync(f, f + '.bak'); }
   if (mode === 'mods') { const d = path.join(instDir(instId), 'mods'); if (fs.existsSync(d)) fs.readdirSync(d).filter(f => f.endsWith('.jar')).forEach(f => fs.renameSync(path.join(d, f), path.join(d, f + '.disabled'))); }
 });
+
+
+/* ---------- Forge ---------- */
+const FORGE_PROMOS = 'https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json';
+ipcMain.handle('forge:versions', async () => [...new Set(Object.keys((await getJson(FORGE_PROMOS)).promos).map(k => k.replace(/-(latest|recommended)$/, '')))]);
+async function prepareForge(inst, javaPath) {
+  const promos = (await getJson(FORGE_PROMOS)).promos, fv = inst.loaderVersion || promos[inst.mc + '-recommended'] || promos[inst.mc + '-latest'];
+  if (!fv) throw new Error('Forge nie ma wersji dla ' + inst.mc);
+  const vdir = path.join(dataDir(), 'versions'), find = () => fs.existsSync(vdir) ? fs.readdirSync(vdir).find(d => /forge/i.test(d) && d.includes(fv) && fs.existsSync(path.join(vdir, d, d + '.json'))) : null;
+  let id = find(); if (id) return id;
+  const full = inst.mc + '-' + fv, jar = path.join(ud(), 'cache', `forge-${full}-installer.jar`);
+  send('status', 'Pobieram instalator Forge...'); await download(`https://maven.minecraftforge.net/net/minecraftforge/forge/${full}/forge-${full}-installer.jar`, jar);
+  fs.mkdirSync(dataDir(), { recursive: true }); const lp = path.join(dataDir(), 'launcher_profiles.json');
+  if (!fs.existsSync(lp)) fs.writeFileSync(lp, JSON.stringify({ profiles: {}, settings: {}, version: 3 }));
+  const java = /javaw(\.exe)?$/.test(javaPath) ? javaPath.replace(/javaw(\.exe)?$/, 'java$1') : javaPath;
+  send('status', 'Instaluję Forge (to może potrwać kilka minut)...');
+  await new Promise((res, rej) => {
+    const p = require('child_process').spawn(java, ['-jar', jar, '--installClient', dataDir()], { windowsHide: true }); let tail = '';
+    const on = d => { const x = String(d); tail = (tail + x).slice(-600); send('log', x); }; p.stdout.on('data', on); p.stderr.on('data', on);
+    p.on('error', e => rej(new Error('Nie można uruchomić Javy: ' + e.message)));
+    p.on('close', code => code === 0 ? res() : rej(new Error('Instalator Forge zakończył się błędem. ' + tail.split('\n').filter(Boolean).slice(-2).join(' '))));
+  });
+  id = find(); if (!id) throw new Error('Nie znaleziono zainstalowanej wersji Forge'); return id;
+}
 
 /* ---------- Java (pobieranie i aktualizacja) ---------- */
 const JAVA_ALL = 'https://launchermeta.mojang.com/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json';
@@ -247,9 +273,9 @@ ipcMain.handle('play', async (_, { instId, ram, jvm }) => {
   if (session.type === 'ms' && Date.now() - session.at > 3600000) await activate(session.id);
   fs.mkdirSync(dataDir(), { recursive: true });
   const version = { number: inst.mc, type: /^\d+\.\d+(\.\d+)?$/.test(inst.mc) ? 'release' : 'snapshot' };
-  if (inst.loader !== 'vanilla') version.custom = await prepareLoader(inst);
   let javaPath = process.platform === 'win32' ? 'javaw' : 'java';
   if (readCfg().autoJava !== false) { try { javaPath = (await ensureJava(inst.mc)) || javaPath; } catch (e) { send('status', 'Java: ' + e.message + ' (używam systemowej)'); } }
+  if (inst.loader === 'forge') version.custom = await prepareForge(inst, javaPath); else if (inst.loader !== 'vanilla') version.custom = await prepareLoader(inst);
   const l = new Client();
   l.on('progress', e => send('progress', e)); l.on('debug', d => send('status', d));
   l.on('data', d => { send('log', String(d)); if (rpc) watchLog(String(d)); });

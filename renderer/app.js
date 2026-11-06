@@ -6,7 +6,7 @@ const chip = (txt, on, fn) => el('button', { className: 'chip' + (on ? ' on' : '
 const save = o => { Object.assign(cfg, o); c.setSettings(o); };
 const tabBtn = id => document.querySelector(`nav [data-tab="${id}"]`);
 const say = x => $('#status').textContent = x;
-const LOADERS = { vanilla: 'Vanilla', fabric: 'Fabric', quilt: 'Quilt' };
+const LOADERS = { vanilla: 'Vanilla', fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge' };
 const fmtPlay = s => !s ? '' : s < 60 ? '<1 ' + t('min') : `${Math.floor(s / 3600)} ${t('hr')} ${Math.floor(s % 3600 / 60)} ${t('min')}`;
 let tick = null, gStart = 0;
 const updNow = () => { const d = Math.floor((Date.now() - gStart) / 1000), p = n => String(n).padStart(2, '0'); $('#nowt').textContent = `${t('playing')} ${p(Math.floor(d / 3600))}:${p(Math.floor(d % 3600 / 60))}:${p(d % 60)}`; };
@@ -21,14 +21,14 @@ $('#dlgx').onclick = () => $('#dlg').close();
 
 /* ---- wybór wersji ---- */
 const majorOf = id => (/^(\d+\.\d+)/.exec(id) || [])[1] || 'Snapshoty';
-async function versionPicker() {
+async function versionPicker(allowed) {
   let groups = {}, cur = '';
   const root = el('div', { className: 'vbox' }), M = el('div', { className: 'chips' }), S = el('div', { className: 'chips sub' });
   const sn = el('input', { type: 'checkbox' }), sl = el('label', { className: 'chk' }); sl.append(sn, t('snap'));
   const draw = id => { cur = id; const k = majorOf(id); M.innerHTML = ''; S.innerHTML = '';
     Object.keys(groups).forEach(g => M.append(chip(g, g === k, () => draw(groups[g][0]))));
     groups[k].slice(0, 40).forEach(v => S.append(chip(v, v === id, () => draw(v)))); };
-  const load = async () => { const v = await c.versions(sn.checked); groups = {}; v.forEach(id => (groups[majorOf(id)] ||= []).push(id)); draw(v.find(x => /^\d+\.\d+(\.\d+)?$/.test(x)) || v[0]); };
+  const load = async () => { const v = (await c.versions(sn.checked)).filter(x => !allowed || allowed.has(x)); groups = {}; v.forEach(id => (groups[majorOf(id)] ||= []).push(id)); draw(v.find(x => /^\d+\.\d+(\.\d+)?$/.test(x)) || v[0]); };
   sn.onchange = load; root.append(M, S, sl); await load(); return { node: root, get: () => cur };
 }
 
@@ -52,11 +52,12 @@ function renderInsts() {
 async function openNew() {
   const body = el('div', { className: 'form' }), name = el('input', { className: 'search', placeholder: t('instName') });
   let loader = 'fabric'; const lc = el('div', { className: 'chips' });
-  Object.keys(LOADERS).forEach(l => { const b = chip(LOADERS[l], l === loader, () => { loader = l; [...lc.children].forEach(x => x.classList.toggle('on', x === b)); }); lc.append(b); });
-  const vp = await versionPicker();
+  Object.keys(LOADERS).forEach(l => { const b = chip(LOADERS[l], l === loader, () => { loader = l; [...lc.children].forEach(x => x.classList.toggle('on', x === b)); mount(); }); lc.append(b); });
+  let vp = await versionPicker(); const wrap = el('div'); wrap.append(vp.node);
+  const mount = async () => { try { const allowed = loader === 'forge' ? new Set(await c.forgeVersions()) : null; vp = await versionPicker(allowed); wrap.replaceChildren(vp.node); } catch (e) { wrap.textContent = e.message; } };
   const go = el('button', { className: 'play', textContent: t('create'), onclick: async () => {
     const i = await c.instCreate({ name: name.value.trim() || `${vp.get()} ${LOADERS[loader]}`, mc: vp.get(), loader }); $('#dlg').close(); await loadInsts(); } });
-  body.append(name, el('span', { className: 'cap', textContent: t('loader') }), lc, el('span', { className: 'cap', textContent: t('mcver') }), vp.node, go);
+  body.append(name, el('span', { className: 'cap', textContent: t('loader') }), lc, el('span', { className: 'cap', textContent: t('mcver') }), wrap, go);
   openModal(t('newInst'), body);
 }
 function pickInstance() {
@@ -176,7 +177,7 @@ function browser({ input, list, getType, getCat, cosmetic, getFixed }) {
   async function run(reset) {
     if (busy) return; busy = true; if (reset) { off = 0; list.innerHTML = ''; }
     try {
-      const type = getType(), r = await c.search({ query: input.value, type, category: getCat(), offset: off, mc: curInst()?.mc });
+      const type = getType(), r = await c.search({ query: input.value, type, category: getCat(), offset: off, mc: curInst()?.mc, loader: curInst()?.loader });
       if (!r.mods.length && !off) list.textContent = t('noRes');
       const fixed = getFixed?.(), kd = { mod: 'mod', resourcepack: 'resourcepack', shader: 'shader' }[type];
       const have = new Set(fixed && kd ? await c.instProjects({ id: fixed, kind: kd }) : []);
