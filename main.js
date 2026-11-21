@@ -1,3 +1,7 @@
+// Zgodność ze starszym Electronem (Windows 7): Node 16 nie ma globalnego fetch/FormData/Blob
+if (typeof globalThis.fetch !== 'function') { const u = require('undici'); globalThis.fetch = u.fetch; globalThis.FormData = u.FormData; globalThis.Headers = u.Headers; globalThis.Request = u.Request; globalThis.Response = u.Response; }
+if (typeof globalThis.Blob === 'undefined') globalThis.Blob = require('buffer').Blob;
+const LEGACY = parseInt(process.versions.electron, 10) < 23;
 const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, session: eSession } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path'), fs = require('fs'), os = require('os');
@@ -20,8 +24,8 @@ const FBASE = ['embeddium', 'modernfix', 'ferrite-core', 'entityculling', 'immed
 PRESETS.balanced.forgeMods = FBASE; PRESETS.max.forgeMods = FMAX; PRESETS.potato.forgeMods = FMAX;
 const JVM_FLAGS = ['-XX:+UnlockExperimentalVMOptions', '-XX:+UseG1GC', '-XX:MaxGCPauseMillis=50', '-XX:G1NewSizePercent=20', '-XX:G1ReservePercent=20', '-XX:G1HeapRegionSize=32M', '-XX:+DisableExplicitGC'];
 
-let gameStart = 0, gameInst = null;
-let win, session = null, rpc = null, gameRunning = false, pendingUpdate = false;
+const games = new Map();
+let win, session = null, rpc = null, pendingUpdate = false;
 const ud = () => app.getPath('userData');
 const dataDir = () => path.join(ud(), 'minecraft');
 const instDir = id => path.join(ud(), 'instances', id);
@@ -201,9 +205,30 @@ ipcMain.handle('world:import', async (_, { id }) => {
   return name;
 });
 
+
+/* ---------- kopie instalacji ---------- */
+ipcMain.handle('inst:duplicate', (_, { id }) => {
+  const A = getInst(id); if (!A) throw new Error('Brak instalacji'); if (games.has(id)) throw new Error('Zamknij grę w tej instalacji przed kopiowaniem');
+  const B = createInst(A.name + ' (kopia)', A.mc, A.loader, A.loaderVersion);
+  fs.rmSync(instDir(B.id), { recursive: true, force: true }); fs.cpSync(instDir(id), instDir(B.id), { recursive: true }); return B;
+});
+ipcMain.handle('inst:export', async (_, { id }) => {
+  const A = getInst(id); if (!A) throw new Error('Brak instalacji'); if (games.has(id)) throw new Error('Zamknij grę w tej instalacji przed zapisem kopii');
+  const r = await dialog.showSaveDialog(win, { defaultPath: A.name + '.catium.zip', filters: [{ name: 'Catium', extensions: ['zip'] }] }); if (r.canceled) return false;
+  const z = new AdmZip(); z.addLocalFolder(instDir(id), 'data', f => !/^(logs|crash-reports)[\\/]/.test(f));
+  z.addFile('catium-instance.json', Buffer.from(JSON.stringify({ name: A.name, mc: A.mc, loader: A.loader, loaderVersion: A.loaderVersion }))); z.writeZip(r.filePath); return true;
+});
+ipcMain.handle('inst:import', async () => {
+  const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'ZIP', extensions: ['zip'] }] }); if (r.canceled) return null;
+  const zip = new AdmZip(r.filePaths[0]), m = zip.getEntry('catium-instance.json'); if (!m) throw new Error('To nie jest kopia instalacji Catium');
+  const info = JSON.parse(m.getData().toString()), B = createInst((info.name || 'Import') + ' (import)', info.mc, info.loader, info.loaderVersion), dir = instDir(B.id);
+  for (const e of zip.getEntries()) { if (e.isDirectory || !e.entryName.startsWith('data/')) continue; const t = safeIn(dir, e.entryName.slice(5)); if (!t) continue; fs.mkdirSync(path.dirname(t), { recursive: true }); fs.writeFileSync(t, e.getData()); }
+  return B;
+});
+
 /* ---------- naprawa ---------- */
 ipcMain.handle('repair', (_, { instId, mode }) => {
-  const inst = getInst(instId); if (!inst) throw new Error('Wybierz instalację'); if (gameRunning) throw new Error('Zamknij grę przed naprawą');
+  const inst = getInst(instId); if (!inst) throw new Error('Wybierz instalację'); if (games.has(instId) || (mode === 'full' && games.size)) throw new Error('Zamknij grę przed naprawą');
   const rm = p => fs.rmSync(p, { recursive: true, force: true }), root = dataDir(), vdir = path.join(root, 'versions');
   if (mode === 'quick' || mode === 'full') {
     rm(path.join(vdir, inst.mc)); rm(path.join(root, 'natives'));
@@ -269,7 +294,7 @@ ipcMain.handle('versions', async (_, snap) => (await getJson('https://piston-met
 ipcMain.handle('play', async (_, { instId, ram, jvm }) => {
   const inst = getInst(instId); if (!inst) throw new Error('Najpierw utwórz instalację');
   if (!session) throw new Error('Zaloguj się kontem Microsoft albo wybierz grę offline');
-  if (gameRunning) throw new Error('Gra już działa');
+  if (games.has(instId)) throw new Error('Ta instalacja już działa');
   if (session.type === 'ms' && Date.now() - session.at > 3600000) await activate(session.id);
   fs.mkdirSync(dataDir(), { recursive: true });
   const version = { number: inst.mc, type: /^\d+\.\d+(\.\d+)?$/.test(inst.mc) ? 'release' : 'snapshot' };
@@ -278,17 +303,18 @@ ipcMain.handle('play', async (_, { instId, ram, jvm }) => {
   if (inst.loader === 'forge') version.custom = await prepareForge(inst, javaPath); else if (inst.loader !== 'vanilla') version.custom = await prepareLoader(inst);
   const l = new Client();
   l.on('progress', e => send('progress', e)); l.on('debug', d => send('status', d));
-  l.on('data', d => { send('log', String(d)); if (rpc) watchLog(String(d)); });
-  l.on('close', () => { endGame(); gameRunning = false; send('status', 'Gra zamknięta'); restoreWindow(); discordOff(); if (pendingUpdate) autoUpdater.quitAndInstall(true, true); });
+  l.on('data', d => { const x = String(d), pre = games.size > 1 ? `[${inst.name}] ` : ''; send('log', pre ? x.replace(/^(?=.)/gm, pre) : x); if (rpc) watchLog(x); });
+  l.on('close', () => { endGame(inst.id); send('status', 'Gra zamknięta'); if (!games.size) { restoreWindow(); discordOff(); if (pendingUpdate) autoUpdater.quitAndInstall(true, true); } });
   const proc = await l.launch({ authorization: session.mc, root: dataDir(), version, memory: { max: `${ram}G`, min: `${Math.min(2, ram)}G` }, customArgs: jvm ? JVM_FLAGS : [], javaPath, detached: true, overrides: { gameDirectory: instDir(inst.id) } });
   if (!proc) { restoreWindow(); throw new Error('Nie udało się uruchomić gry. Sprawdź, czy masz Javę 21.'); }
   const mode = readCfg().onLaunch; if (mode === 'minimize') win.minimize(); else if (mode === 'hide') win.hide();
-  gameRunning = true; gameStart = Date.now(); gameInst = inst.id; send('game', { running: true, start: gameStart }); discordOn(inst.mc);
+  games.set(inst.id, Date.now()); send('game', { running: true, id: inst.id, start: games.get(inst.id) });
+  if (rpc) { rpcMc = inst.mc; rpcServer = null; discordUpdate(); } else discordOn(inst.mc);
 });
 
-function endGame() {
-  if (!gameInst) return; const secs = Math.round((Date.now() - gameStart) / 1000), id = gameInst; gameInst = null;
-  writeCfg({ instances: readCfg().instances.map(i => i.id === id ? { ...i, playtime: (i.playtime || 0) + secs } : i) }); send('game', { running: false });
+function endGame(id) {
+  const start = games.get(id); if (start == null) return; games.delete(id);
+  writeCfg({ instances: readCfg().instances.map(i => i.id === id ? { ...i, playtime: (i.playtime || 0) + Math.round((Date.now() - start) / 1000) } : i) }); send('game', { running: false, id });
 }
 /* ---------- własne pliki i zestawy ustawień ---------- */
 ipcMain.handle('inst:add', async (_, { id, kind }) => {
@@ -354,11 +380,16 @@ function restoreWindow() { if (!win) return; win.show(); if (win.isMinimized()) 
 let rpcStart = null, rpcMc = '', rpcServer = null;
 const rpcActivity = () => ({ details: 'Gra w Catium', state: rpcServer && readCfg().discordServer !== false ? rpcServer : 'Minecraft ' + rpcMc, startTimestamp: rpcStart, largeImageKey: readCfg().discordImage || 'https://raw.githubusercontent.com/1JestemBlaze/catium/main/build/icon.png', largeImageText: 'Catium',
   buttons: [{ label: 'Pobierz Catium', url: 'https://github.com/1JestemBlaze/catium/releases/latest' }] });
-const discordUpdate = () => { try { rpc?.user?.setActivity(rpcActivity()).catch(() => {}); } catch {} };
+const rpcSet = a => LEGACY ? rpc?.setActivity(a) : rpc?.user?.setActivity(a);
+const discordUpdate = () => { try { Promise.resolve(rpcSet(rpcActivity())).catch(() => {}); } catch {} };
 async function discordOn(mc) {
   const cfg = readCfg(); if (!cfg.discord || !cfg.discordId) return;
-  try { const { Client: Rpc } = require('@xhayper/discord-rpc'); rpcStart = new Date(); rpcMc = mc; rpcServer = null;
-    rpc = new Rpc({ clientId: cfg.discordId.trim() }); await rpc.login(); await rpc.user?.setActivity(rpcActivity()); } catch (e) { send('status', 'Discord: ' + e.message); }
+  try {
+    const clientId = cfg.discordId.trim(); rpcStart = new Date(); rpcMc = mc; rpcServer = null;
+    if (LEGACY) { rpc = new (require('discord-rpc').Client)({ transport: 'ipc' }); await rpc.login({ clientId }); }
+    else { rpc = new (require('@xhayper/discord-rpc').Client)({ clientId }); await rpc.login(); }
+    await rpcSet(rpcActivity());
+  } catch (e) { send('status', 'Discord: ' + e.message); }
 }
 function discordOff() { try { rpc?.destroy(); } catch {} rpc = null; }
 function watchLog(s) {
@@ -369,9 +400,10 @@ function watchLog(s) {
 }
 function initUpdater() {
   if (!app.isPackaged) return;
+  if (LEGACY) autoUpdater.channel = 'win7';
   autoUpdater.on('update-available', i => send('update', { state: 'available', version: i.version }));
   autoUpdater.on('download-progress', p => send('update', { state: 'downloading', percent: Math.round(p.percent) }));
-  autoUpdater.on('update-downloaded', i => { send('update', { state: 'ready', version: i.version }); if (gameRunning) pendingUpdate = true; else setTimeout(() => autoUpdater.quitAndInstall(true, true), 2500); });
+  autoUpdater.on('update-downloaded', i => { send('update', { state: 'ready', version: i.version }); if (games.size) pendingUpdate = true; else setTimeout(() => autoUpdater.quitAndInstall(true, true), 2500); });
   autoUpdater.checkForUpdates().catch(() => {});
 }
 ipcMain.handle('update:install', () => autoUpdater.quitAndInstall());

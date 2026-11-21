@@ -8,9 +8,14 @@ const tabBtn = id => document.querySelector(`nav [data-tab="${id}"]`);
 const say = x => $('#status').textContent = x;
 const LOADERS = { vanilla: 'Vanilla', fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge' };
 const fmtPlay = s => !s ? '' : s < 60 ? '<1 ' + t('min') : `${Math.floor(s / 3600)} ${t('hr')} ${Math.floor(s % 3600 / 60)} ${t('min')}`;
-let tick = null, gStart = 0;
-const updNow = () => { const d = Math.floor((Date.now() - gStart) / 1000), p = n => String(n).padStart(2, '0'); $('#nowt').textContent = `${t('playing')} ${p(Math.floor(d / 3600))}:${p(Math.floor(d % 3600 / 60))}:${p(d % 60)}`; };
-c.on('game', g => { clearInterval(tick); if (g.running) { gStart = g.start; $('#now').hidden = false; updNow(); tick = setInterval(updNow, 1000); } else { $('#now').hidden = true; loadInsts(); } });
+const playing = new Map(), starting = new Set(); let tick = null, toastT = null;
+const toast = x => { const n = $('#toast'); n.textContent = x; n.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => n.hidden = true, 4500); };
+const updNow = () => { const ids = [...playing.keys()]; if (!ids.length) return; const d = Math.floor((Date.now() - playing.get(ids[0])) / 1000), p = n => String(n).padStart(2, '0');
+  $('#nowt').textContent = ids.length > 1 ? t('playing_n').replace('{n}', ids.length) : `${t('playing')} ${p(Math.floor(d / 3600))}:${p(Math.floor(d % 3600 / 60))}:${p(d % 60)}`; };
+const refreshPlay = () => { const on = playing.has(active), st = starting.has(active); $('#playt').textContent = on ? t('running') : st ? t('starting') : t('play'); $('#play').disabled = on || st; };
+c.on('game', g => { if (g.running) playing.set(g.id, g.start); else playing.delete(g.id); clearInterval(tick);
+  if (playing.size) { $('#now').hidden = false; updNow(); tick = setInterval(updNow, 1000); } else $('#now').hidden = true;
+  if (g.running) renderInsts(); else loadInsts(); });
 const curInst = () => insts.find(i => i.id === active);
 
 $$('nav button').forEach(b => b.onclick = () => { $$('nav button,.tab').forEach(x => x.classList.remove('on')); b.classList.add('on'); $('#' + b.dataset.tab).classList.add('on'); if (b.dataset.tab === 'inst') showView('list'); });
@@ -42,11 +47,13 @@ function renderInsts() {
   const g = $('#insts'); g.innerHTML = '';
   insts.forEach(i => {
     const d = el('div', { className: 'inst' + (i.id === active ? ' on' : ''), onclick: () => { active = i.id; save({ active }); renderInsts(); renderOpt(); renderInstalled(); renderMig(); } });
-    d.append(el('b', { textContent: i.name }), el('small', { textContent: `${i.mc} · ${LOADERS[i.loader]}` }), el('small', { textContent: fmtPlay(i.playtime) }), instBtns(i),
+    d.append(el('b', { textContent: i.name }), el('small', { textContent: `${i.mc} · ${LOADERS[i.loader]}` }), el('small', { textContent: fmtPlay(i.playtime) }), cardPlay(i), instBtns(i), instRow(i),
       el('button', { className: 'x', textContent: '×', onclick: async e => { e.stopPropagation(); if (confirm(t('confirmDel'))) { await c.instDelete(i.id); await loadInsts(); } } }));
     g.append(d);
   });
-  g.append(el('button', { className: 'inst add', textContent: '+ ' + t('newInst'), onclick: openNew }), el('button', { className: 'inst add', textContent: '+ ' + t('mp_new'), onclick: () => { showView('packs'); runPacks?.(true); } }));
+  g.append(el('button', { className: 'inst add', textContent: '+ ' + t('newInst'), onclick: openNew }), el('button', { className: 'inst add', textContent: '+ ' + t('mp_new'), onclick: () => { showView('packs'); runPacks?.(true); } }),
+    el('button', { className: 'inst add', textContent: '+ ' + t('imp'), onclick: async () => { try { const n = await c.instImport(); if (n) { await loadInsts(); toast(t('imp_done').replace('{n}', n.name)); } } catch (er) { toast(er.message); } } }));
+  refreshPlay();
   const q = $('#quick'); q.innerHTML = ''; insts.forEach(i => q.append(chip(i.name, i.id === active, () => { active = i.id; save({ active }); renderInsts(); renderOpt(); renderInstalled(); })));
 }
 async function openNew() {
@@ -125,6 +132,17 @@ async function runMig() {
 }
 const TILE_ICONS = { mod: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5"/>', resourcepack: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M3 17l5-5 4 4 3-3 6 6"/>',
   shader: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>', world: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/>' };
+const cardPlay = i => { const on = playing.has(i.id), st = starting.has(i.id);
+  return el('button', { className: 'cardplay' + (on ? ' on' : ''), textContent: on ? '● ' + t('running') : st ? t('starting') : '▶ ' + t('play'), disabled: on || st, onclick: e => { e.stopPropagation(); playInst(i.id); } }); };
+const instRow = i => { const r = el('div', { className: 'instrow' });
+  r.append(el('button', { className: 'chip', textContent: t('dup'), onclick: async e => { e.stopPropagation(); try { const n = await c.instDuplicate({ id: i.id }); await loadInsts(); toast(t('dup_done').replace('{n}', n.name)); } catch (er) { toast(er.message); } } }),
+    el('button', { className: 'chip', textContent: t('exp'), onclick: async e => { e.stopPropagation(); try { if (await c.instExport({ id: i.id })) toast(t('exp_done')); } catch (er) { toast(er.message); } } })); return r; };
+async function playInst(id) {
+  if (!session) return toast(t('needLogin'));
+  starting.add(id); renderInsts(); say(t('preparing'));
+  try { await c.play({ instId: id, ram: +$('#ram').value, jvm: $('#jvm').checked }); } catch (e) { say(e.message); toast(e.message); }
+  starting.delete(id); renderInsts();
+}
 const instBtns = i => { const r = el('div', { className: 'instbtns' });
   [['mod', 'b_mods'], ['resourcepack', 'b_res'], ['shader', 'b_shader'], ['world', 'b_world']].forEach(([k, l]) => { const b = el('button', { className: 'tilebtn', onclick: e => { e.stopPropagation(); openDetail(i.id, k); } });
     b.innerHTML = '<svg viewBox="0 0 24 24">' + TILE_ICONS[k] + '</svg><span></span>'; b.querySelector('span').textContent = t(l); r.append(b); }); return r; };
@@ -255,7 +273,7 @@ $('#logclear').onclick = () => logNode.data = ''; $('#logcopy').onclick = () => 
 const PRESETS_C = ['#8b3dff', '#4c8dff', '#ff8a3d', '#4ade80', '#f472b6', '#f87171', '#22d3ee'];
 function setAccent(h) {
   const r = document.documentElement.style, [R, G, B] = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
-  r.setProperty('--accent', h); r.setProperty('--on', (R * 299 + G * 587 + B * 114) / 1000 > 150 ? '#0b1220' : '#ffffff');
+  r.setProperty('--accent', h); r.setProperty('--rgb', [R, G, B].join(',')); r.setProperty('--on', (R * 299 + G * 587 + B * 114) / 1000 > 150 ? '#0b1220' : '#ffffff');
   $('#accent').value = h; $$('.sw').forEach(b => b.classList.toggle('on', b.dataset.c === h));
 }
 PRESETS_C.forEach(h => { const b = el('button', { className: 'sw', title: h, onclick: () => { setAccent(h); save({ accent: h }); } }); b.dataset.c = h; b.style.background = h; $('#swatches').append(b); });
@@ -330,11 +348,7 @@ async function loadNews() {
 }
 tabBtn('news').addEventListener('click', loadNews);
 $('#ram').oninput = e => { $('#ramv').textContent = e.target.value + ' GB'; save({ ram: +e.target.value }); };
-$('#play').onclick = async () => {
-  if (!active) return say(t('noInst')); if (!session) return say(t('needLogin'));
-  $('#play').disabled = true; say(t('preparing'));
-  try { await c.play({ instId: active, ram: +$('#ram').value, jvm: $('#jvm').checked }); } catch (e) { say(e.message); } $('#play').disabled = false;
-};
+$('#play').onclick = () => active ? playInst(active) : say(t('noInst'));
 c.on('progress', e => { if (e.total) $('#barfill').style.width = (e.task / e.total * 100) + '%'; });
 c.on('status', x => { const o = migBusy ? $('#migmsg') : $('#opt').classList.contains('on') ? $('#packout') : $('#settings').classList.contains('on') ? $('#javamsg') : $('#status'); o.textContent = String(x).slice(0, 140); });
 c.on('update', u => { $('#upd').hidden = false;

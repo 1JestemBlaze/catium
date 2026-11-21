@@ -1,19 +1,22 @@
 {
   "name": "catium",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Catium - Minecraft launcher",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win --publish never",
-    "release": "electron-builder --win --publish always"
+    "release": "electron-builder --win --publish always",
+    "dist:win7": "electron-builder --win --config electron-builder.legacy.json --publish never"
   },
   "dependencies": {
     "minecraft-launcher-core": "^3.18.2",
     "msmc": "^5.0.4",
     "electron-updater": "^6.3.9",
     "@xhayper/discord-rpc": "^1.2.0",
-    "adm-zip": "^0.5.16"
+    "adm-zip": "^0.5.16",
+    "undici": "^5.28.4",
+    "discord-rpc": "^4.0.1"
   },
   "devDependencies": {
     "electron": "^33.0.0",
