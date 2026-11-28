@@ -84,3 +84,5 @@ summary{cursor:pointer;color:var(--mute)}details .list{margin-top:12px}details.c
 .cardplay:hover:not(:disabled){transform:translateY(-1px)}.cardplay:disabled{box-shadow:none;cursor:default}.cardplay.on{background:transparent;color:var(--ok);border:1px solid var(--ok)}
 .instrow{display:flex;gap:6px;margin-top:8px}.instrow .chip{flex:1;padding:6px 8px;font-size:12px}
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:11px 20px;z-index:60;box-shadow:0 8px 30px #000a;max-width:70%}
+.acts{display:flex;gap:8px;align-items:center;flex:none}.mod .acts button{padding:8px 16px}.mod .verbtn{background:transparent;border:1px solid var(--line);color:var(--mute)}.mod .verbtn:hover{border-color:var(--accent);color:var(--text);background:var(--tint)}
+dialog.wide{max-width:780px;width:min(780px,90vw)}#dlgb{max-height:62vh;overflow:auto}.vers .row{flex-wrap:wrap}.vers .row.on{background:var(--tint)}.vers .row b{min-width:180px}

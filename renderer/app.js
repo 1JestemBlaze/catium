@@ -21,7 +21,7 @@ const curInst = () => insts.find(i => i.id === active);
 $$('nav button').forEach(b => b.onclick = () => { $$('nav button,.tab').forEach(x => x.classList.remove('on')); b.classList.add('on'); $('#' + b.dataset.tab).classList.add('on'); if (b.dataset.tab === 'inst') showView('list'); });
 
 /* ---- okienka ---- */
-function openModal(title, node) { const d = $('#dlg'); d.onclose = null; $('#dlgt').textContent = title; $('#dlgb').replaceChildren(node); d.showModal(); return d; }
+function openModal(title, node) { const d = $('#dlg'); d.onclose = null; d.classList.remove('wide'); $('#dlgt').textContent = title; $('#dlgb').replaceChildren(node); d.showModal(); return d; }
 $('#dlgx').onclick = () => $('#dlg').close();
 
 /* ---- wybór wersji ---- */
@@ -88,6 +88,7 @@ async function renderInstalled() {
     files.forEach(f => { const r = el('div', { className: 'row' + (f.enabled ? '' : ' off') });
       r.append(el('b', { textContent: f.title, title: f.file }),
         el('button', { textContent: f.enabled ? t('on') : t('off'), onclick: async () => { await c.instToggle({ id: i.id, kind, file: f.file }); renderInstalled(); } }),
+        ...(f.project ? [el('button', { textContent: t('versions'), onclick: () => openVersions(f.project, f.title, kind, f.cosmetic, i.id) })] : []),
         el('button', { textContent: t('remove'), onclick: async () => { await c.instRemove({ id: i.id, kind, file: f.file }); renderInstalled(); } }));
       box.append(r); });
   }
@@ -173,6 +174,23 @@ $$('.subtabs').forEach(bar => { const sec = bar.parentElement; bar.querySelector
 
 /* ---- Modrinth ---- */
 const fmtNum = n => n >= 1e6 ? (n / 1e6).toFixed(1) + ' ' + t('m') : n >= 1e3 ? Math.round(n / 1e3) + ' ' + t('k') : String(n);
+async function openVersions(project, title, kind, cosmetic, fixedId, onDone) {
+  const inst = fixedId ? insts.find(i => i.id === fixedId) : await pickInstance(); if (!inst) return;
+  if (kind === 'mod' && inst.loader === 'vanilla') return alert(t('needLoader'));
+  let all = false; const body = el('div', { className: 'vers' }), list = el('div', { className: 'list' }), tgl = el('label', { className: 'chk' }), cb = el('input', { type: 'checkbox' }); tgl.append(cb, t('ver_all'));
+  const load = async () => {
+    list.textContent = '...';
+    try { const vs = await c.modVersions({ project, instId: inst.id, kind, all }); list.innerHTML = ''; if (!vs.length) list.textContent = t('ver_none');
+      vs.forEach(v => { const r = el('div', { className: 'row' + (v.installed ? ' on' : '') });
+        const b = el('button', { textContent: v.installed ? '✓ ' + t('installed') : t('install'), disabled: v.installed, onclick: async () => { b.disabled = true; b.textContent = t('installing');
+          try { await c.installVersion({ versionId: v.id, instId: inst.id, kind, title, cosmetic }); onDone?.(); renderInstalled(); await load(); } catch (e) { b.textContent = t('err'); b.title = e.message; b.disabled = false; } } });
+        r.append(el('b', { textContent: v.number + (v.name && v.name !== v.number ? ' · ' + v.name : ''), title: v.name }),
+          el('small', { textContent: `${t('vt_' + v.type)} · ${v.mc.slice(-3).join(', ')} · ${new Date(v.date).toLocaleDateString(cfg.lang === 'en' ? 'en-GB' : 'pl-PL')}` }), b); list.append(r); }); }
+    catch (e) { list.textContent = t('fail') + e.message; }
+  };
+  cb.onchange = () => { all = cb.checked; load(); };
+  body.append(el('p', { className: 'hint', textContent: instLabel(inst) }), tgl, list); openModal(title, body).classList.add('wide'); load();
+}
 function modCard(m, kind, cosmetic, opts = {}) {
   const d = el('div', { className: 'mod' }), tx = el('div');
   tx.append(el('b', { textContent: m.title }), el('small', { textContent: m.desc }), el('small', { className: 'meta', textContent: [m.author, m.downloads != null ? fmtNum(m.downloads) + ' ' + t('dl') : ''].filter(Boolean).join(' · ') }));
@@ -188,7 +206,9 @@ function modCard(m, kind, cosmetic, opts = {}) {
       await c.install({ id: m.id, instId: inst.id, kind, title: m.title, cosmetic }); markDone(); renderInstalled();
     } catch (e) { b.textContent = t('err'); b.title = e.message; b.disabled = false; }
   };
-  d.append(m.icon ? el('img', { src: m.icon, alt: '' }) : el('span', { className: 'ph' }), tx, b); return d;
+  const acts = el('div', { className: 'acts' });
+  if (kind !== 'modpack') acts.append(el('button', { className: 'verbtn', textContent: t('versions'), onclick: () => openVersions(m.id, m.title, kind, cosmetic, opts.fixedId, markDone) }));
+  acts.append(b); d.append(m.icon ? el('img', { src: m.icon, alt: '' }) : el('span', { className: 'ph' }), tx, acts); return d;
 }
 function browser({ input, list, getType, getCat, cosmetic, getFixed }) {
   let off = 0, tm, busy = false; const more = el('button', { className: 'chip more', textContent: t('more') });

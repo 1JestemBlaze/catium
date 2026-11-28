@@ -60,7 +60,7 @@ ipcMain.handle('inst:files', (_, { id, kind }) => {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir).filter(f => /\.(jar|zip|disabled)$/.test(f)).map(f => {
     const base = f.replace(/\.disabled$/, ''), m = meta[kind + '/' + base] || {};
-    return { file: f, enabled: !f.endsWith('.disabled'), title: m.title || base, cosmetic: !!m.cosmetic };
+    return { file: f, enabled: !f.endsWith('.disabled'), title: m.title || base, cosmetic: !!m.cosmetic, project: m.project || null };
   });
 });
 ipcMain.handle('inst:projects', async (_, { id, kind }) => {
@@ -82,6 +82,7 @@ ipcMain.handle('inst:toggle', (_, { id, kind, file }) => {
 });
 ipcMain.handle('inst:remove', (_, { id, kind, file }) => fs.rmSync(path.join(instDir(id), KIND_DIR[kind], file), { force: true }));
 
+function loadersOf(inst) { return inst.loader === 'quilt' ? ['quilt', 'fabric'] : inst.loader === 'forge' ? ['forge'] : ['fabric']; }
 /* ---------- Modrinth ---------- */
 ipcMain.handle('mods:search', async (_, { query, type = 'mod', category, offset = 0, mc, limit = 20, loader }) => {
   const facets = [[`project_type:${type}`]];
@@ -93,14 +94,14 @@ ipcMain.handle('mods:search', async (_, { query, type = 'mod', category, offset 
 });
 async function installProject(project, inst, kind, meta, seen = new Set()) {
   if (seen.has(project)) return; seen.add(project);
-  const loaders = inst.loader === 'quilt' ? ['quilt', 'fabric'] : inst.loader === 'forge' ? ['forge'] : ['fabric'];
+  const loaders = loadersOf(inst);
   const url = q => `${MR}/project/${project}/version${q}`;
   let vers = await getJson(url(`?game_versions=${enc([inst.mc])}` + (kind === 'mod' ? `&loaders=${enc(loaders)}` : '')), UA);
   if (!vers.length && kind !== 'mod') vers = await getJson(url(''), UA);
   if (!vers.length) throw new Error(`${project}: brak wersji dla ${inst.mc}`);
   const f = vers[0].files.find(x => x.primary) || vers[0].files[0];
   await download(f.url, path.join(instDir(inst.id), KIND_DIR[kind], f.filename));
-  { const m = readMeta(inst.id); m[kind + '/' + f.filename] = { ...(meta || { title: f.filename }), project: vers[0].project_id }; writeMeta(inst.id, m); }
+  { const m = readMeta(inst.id); m[kind + '/' + f.filename] = { ...(meta || { title: f.filename }), project: vers[0].project_id, version: vers[0].id }; writeMeta(inst.id, m); }
   if (kind === 'mod') for (const d of vers[0].dependencies || []) if (d.dependency_type === 'required' && d.project_id) await installProject(d.project_id, inst, 'mod', null, seen).catch(() => {});
   return f.filename;
 }
@@ -224,6 +225,27 @@ ipcMain.handle('inst:import', async () => {
   const info = JSON.parse(m.getData().toString()), B = createInst((info.name || 'Import') + ' (import)', info.mc, info.loader, info.loaderVersion), dir = instDir(B.id);
   for (const e of zip.getEntries()) { if (e.isDirectory || !e.entryName.startsWith('data/')) continue; const t = safeIn(dir, e.entryName.slice(5)); if (!t) continue; fs.mkdirSync(path.dirname(t), { recursive: true }); fs.writeFileSync(t, e.getData()); }
   return B;
+});
+
+
+/* ---------- wybór konkretnej wersji ---------- */
+ipcMain.handle('mods:versions', async (_, { project, instId, kind, all }) => {
+  const inst = getInst(instId); if (!inst) throw new Error('Brak instalacji');
+  const parts = []; if (kind === 'mod') parts.push('loaders=' + enc(loadersOf(inst))); if (!all) parts.push('game_versions=' + enc([inst.mc]));
+  const vers = await getJson(`${MR}/project/${project}/version${parts.length ? '?' + parts.join('&') : ''}`, UA);
+  const dir = path.join(instDir(instId), KIND_DIR[kind]), meta = readMeta(instId), have = new Set();
+  if (fs.existsSync(dir)) for (const f of fs.readdirSync(dir)) { const base = f.replace(/\.disabled$/, ''); if (meta[kind + '/' + base]?.project === vers[0]?.project_id) have.add(base); }
+  return vers.map(v => ({ id: v.id, number: v.version_number, name: v.name, type: v.version_type, date: v.date_published, mc: v.game_versions, installed: v.files.some(f => have.has(f.filename)) }));
+});
+ipcMain.handle('mods:installVersion', async (_, { versionId, instId, kind, title, cosmetic }) => {
+  const inst = getInst(instId); if (!inst) throw new Error('Brak instalacji');
+  const v = await getJson(`${MR}/version/${versionId}`, UA), f = v.files.find(x => x.primary) || v.files[0];
+  const meta = readMeta(instId), dir = path.join(instDir(instId), KIND_DIR[kind]);
+  for (const k of Object.keys(meta)) if (k.startsWith(kind + '/') && meta[k].project === v.project_id) { const fn = k.slice(kind.length + 1); for (const c of [fn, fn + '.disabled']) fs.rmSync(path.join(dir, c), { force: true }); delete meta[k]; }
+  await download(f.url, path.join(dir, f.filename));
+  meta[kind + '/' + f.filename] = { title: title || v.name, cosmetic: !!cosmetic, project: v.project_id, version: v.id }; writeMeta(instId, meta);
+  if (kind === 'mod') for (const d of v.dependencies || []) if (d.dependency_type === 'required' && d.project_id) await installProject(d.project_id, inst, 'mod', null, new Set([v.project_id])).catch(() => {});
+  return f.filename;
 });
 
 /* ---------- naprawa ---------- */
